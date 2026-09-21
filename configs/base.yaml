@@ -1,0 +1,73 @@
+# Shared settings inherited by every experiment config. Nothing in scripts/ or
+# src/ hard-codes a value that appears here.
+
+seed: 0
+
+paths:
+  # Raw corpora (one-time downloads from the bakeoff's download scripts).
+  scicueval_root: /home/rbartelme/02-resources/SciCUEval/SciCUEval/data
+  mmlu_root: /home/rbartelme/02-resources/MMLU/data
+  # The bakeoff's flattened JSONLs. Reading these (rather than re-flattening the
+  # raw tree) is the simplest way to guarantee the identical eval sample.
+  scicueval_jsonl: /home/rbartelme/00-projects/tda-embedder-bakeoff/scratch/scicueval_combined.jsonl
+  mmlu_jsonl: /home/rbartelme/00-projects/tda-embedder-bakeoff/scratch/mmlu_combined.jsonl
+  # Repo-local artifact roots (all gitignored except results/).
+  data_raw: data/raw
+  pairs: data/pairs
+  checkpoints: checkpoints
+  embeddings: embeddings
+  results: results
+
+corpus:
+  prompt_field: question
+  label_field: source_subset
+  # Bakeoff eval sample: 400 per label, one RNG stream seeded 42, labels walked
+  # alphabetically. Changing either value moves the eval split.
+  sample_per_class: 400
+  sample_seed: 42
+
+pairs:
+  n_pairs: 20000
+  matched_max_sd: 0.5      # standardized textstat distance <= this
+  mismatched_min_sd: 1.5   # standardized textstat distance >= this
+
+train:
+  max_length: 128
+  batch_size: 128
+  lr: 2.0e-5
+  warmup_ratio: 0.1
+  epochs: 3
+  weight_decay: 0.01
+  bf16: true
+  checkpoint_fracs: [0.0, 0.1, 0.25, 0.5, 1.0]
+  log_every: 1
+
+aux:
+  subsample: 64   # aux loss computed on this many random rows of each batch
+  every: 1        # ... every N optimizer steps
+
+eval:
+  # Encoding for evaluation matches the bakeoff, not the training length.
+  max_length: 256
+  batch_size: 32
+  seed: 42
+  # Layer 1. 'holdout' is the bakeoff's single stratified 80/20 split.
+  # 'cv5' opts into 5-fold CV accuracy instead.
+  lr_eval: holdout
+  # Layer 2. Copied from tda-embedder-bakeoff MAPPER_CONFIG; do not edit.
+  mapper:
+    umap: {n_components: 2, n_neighbors: 15, min_dist: 0.1, metric: cosine}
+    cover: {n_cubes: 15, perc_overlap: 0.3}
+    clusterer: {min_cluster_size: 5, metric: precomputed}
+  n_seeds: 25
+  base_seed: 42
+  n_workers: 8
+  # Layer 3 anchor rho subsampling, as in the bakeoff.
+  anchor_max_docs: 500
+  anchor_max_pairs: 5000
+  disintegrated:
+    min_coverage: 0.05
+    min_nodes: 5
+  # Layer 4 router.
+  router:
+    holdout_frac: 0.2

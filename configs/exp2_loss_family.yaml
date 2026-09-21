@@ -1,0 +1,8 @@
+# Exp 2: loss family at fixed tau and fixed data.
+exp: exp2_loss_family
+base: configs/base.yaml
+models: [biomedbert-fulltext]
+loss: [mnrl, triplet, cosent, mlm]   # mlm ignores tau and pairs (continued pretraining on the same texts)
+tau: 0.05
+pair_set: random
+corpora: [scicueval, mmlu]

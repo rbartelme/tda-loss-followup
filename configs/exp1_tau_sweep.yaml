@@ -1,0 +1,8 @@
+# Exp 1: temperature sweep. Does tau alone move the topology?
+exp: exp1_tau_sweep
+base: configs/base.yaml
+models: [minilm, biomedbert-fulltext]
+loss: mnrl
+tau: [0.01, 0.05, 0.2, 1.0]
+pair_set: random
+corpora: [scicueval, mmlu]

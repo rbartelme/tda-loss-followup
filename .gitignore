@@ -1,0 +1,26 @@
+# Large, regenerable artifacts. Directories are kept via .gitkeep.
+data/raw/*
+!data/raw/.gitkeep
+data/pairs/*
+!data/pairs/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+embeddings/*
+!embeddings/.gitkeep
+*.pt
+*.safetensors
+*.npy
+*.npz
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Editor / OS / secrets
+.vscode/
+.idea/
+.DS_Store
+.env*

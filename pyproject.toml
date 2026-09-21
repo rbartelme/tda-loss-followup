@@ -1,0 +1,67 @@
+[project]
+name = "tda-loss-followup"
+version = "0.1.0"
+description = "Does the training objective, not the architecture, set an embedder's topology? Fine-tune sweeps over temperature, loss family, pair construction, and topological auxiliaries, evaluated with the tda-embedder-bakeoff harness plus a router layer."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Ryan Bartelme", email = "r.p.bartelme@gmail.com" }]
+keywords = [
+    "embeddings",
+    "contrastive-learning",
+    "topological-data-analysis",
+    "mapper",
+    "persistent-homology",
+    "sentence-transformers",
+]
+
+# Every direct dependency is pinned. Versions marked (bakeoff) match the
+# tda-embedder-bakeoff lockfile at commit 4625b22 so Layer 1-3 numbers are
+# reproducible against the first post. The rest are pinned to whatever uv
+# resolved at scaffold time.
+dependencies = [
+    "sentence-transformers==5.7.0",
+    "transformers==4.51.3",      # (bakeoff)
+    "torch==2.6.0",              # (bakeoff)
+    "accelerate==1.15.0",        # required by SentenceTransformerTrainer
+    "datasets==3.2.0",           # (bakeoff)
+    "textstat==0.7.4",           # (bakeoff) imports pkg_resources -> setuptools<81
+    "setuptools==80.10.2",
+    "umap-learn==0.5.12",        # (bakeoff)
+    "hdbscan==0.8.42",           # (bakeoff)
+    "kmapper==2.1.0",            # (bakeoff)
+    "networkx==3.6.1",           # (bakeoff) Mapper graph statistics
+    "scikit-learn==1.8.0",       # (bakeoff)
+    "scipy==1.17.1",             # (bakeoff)
+    "numpy==2.4.4",              # (bakeoff)
+    "pandas==3.0.6",
+    "pyarrow==25.0.1",           # parquet for data/pairs
+    "pyyaml==6.0.3",
+    "matplotlib==3.10.9",        # (bakeoff)
+    "persist0-tda[torch]==0.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tlf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["src/tlf/_bakeoff"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]

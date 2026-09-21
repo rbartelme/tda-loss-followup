@@ -1,0 +1,9 @@
+# Exp 3: pair construction at fixed loss and tau. Compared against the
+# medcpt-query reference row from configs/reference.yaml.
+exp: exp3_data_vs_loss
+base: configs/base.yaml
+models: [biomedbert-fulltext]
+loss: mnrl
+tau: 0.05
+pair_set: [matched, mismatched, random]
+corpora: [scicueval, mmlu]

@@ -1,0 +1,21 @@
+# Encoder roster. HF ids and mean pooling match the bakeoff's ENCODERS map.
+# No prompt prefixes for any of these.
+minilm:
+  hf_id: sentence-transformers/all-MiniLM-L6-v2
+  pooling: mean
+  dim: 384
+biomedbert-fulltext:
+  hf_id: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
+  pooling: mean
+  dim: 768
+bge-base:
+  hf_id: BAAI/bge-base-en-v1.5
+  pooling: mean
+  dim: 768
+medcpt-query:
+  # Reference only: never fine-tuned here. Its bakeoff numbers live in
+  # configs/reference.yaml.
+  hf_id: ncbi/MedCPT-Query-Encoder
+  pooling: mean
+  dim: 768
+  reference_only: true

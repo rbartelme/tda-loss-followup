@@ -1,0 +1,13 @@
+# Exp 4: MNRL plus a topological / linguistic auxiliary, lambda-weighted.
+exp: exp4_topo_aux
+base: configs/base.yaml
+models: [biomedbert-fulltext]
+loss: mnrl
+tau: 0.05
+pair_set: random
+aux: [textstat_head, dist_preserve, persist0_h0]
+lambda: [0.1, 1.0]
+aux_params:
+  persist0_h0:
+    top_k: 32   # TopoH0Loss(top_k=...); confirmed against persist0-tda 0.2.0 in Task 4
+corpora: [scicueval, mmlu]
