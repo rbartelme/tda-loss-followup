@@ -56,6 +56,7 @@ packages = ["src/tlf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["ignore:pkg_resources is deprecated:UserWarning"]
 
 [tool.ruff]
 line-length = 88
