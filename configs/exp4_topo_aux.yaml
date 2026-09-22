@@ -1,6 +1,6 @@
 # Exp 4: MNRL plus a topological / linguistic auxiliary, lambda-weighted.
 exp: exp4_topo_aux
-base: configs/base.yaml
+base: configs/experiments.yaml
 models: [biomedbert-fulltext]
 loss: mnrl
 tau: 0.05

@@ -145,11 +145,19 @@ Differences between this protocol, the scaffold brief, and the code as built
    experiment reads them back and writes its own CSV row. `--force` ignores
    both caches. The cache only hits if the four experiment configs share one
    `eval` section, which constrains items 2 and 6.
-2. **Layer 1 LR.** Protocol: 5-fold CV. Built: the bakeoff's single 80/20
+2. ~~**Layer 1 LR.** Protocol: 5-fold CV. Built: the bakeoff's single 80/20
    holdout by default, `eval.lr_eval: cv` opt-in. Proposed: `cv` in the four
    experiment configs, holdout kept in `base.yaml` so `make repro-check`
    compares like with like against the first post. CSV `lr_acc` then differs
-   in kind from `reference.yaml`'s; no figure depends on that comparison.
+   in kind from `reference.yaml`'s; no figure depends on that comparison.~~
+   **Resolved 2026-09-22.** As proposed, with the override in one place:
+   `configs/experiments.yaml` layers `eval.lr_eval: cv` over `base.yaml` and
+   the four experiment configs inherit from it, so the grids share one `eval`
+   section by construction (item 1's metrics cache needs that). `base.yaml`
+   stays holdout, so `make repro-check` is like for like with the first post.
+   The CSV gains an `lr_eval` column (`cv` or `holdout`) so `lr_acc` values
+   are never compared across kinds by accident; `load_results` fills it empty
+   for CSVs written before the column existed.
 3. **Checkpoints evaluated per experiment.** Protocol: init and final for
    Exps 2 and 3, final only for Exp 4. Built: the `exp2`–`exp4` Make targets
    evaluate all five fractions. Proposed: `--only-final` on those targets;

@@ -20,6 +20,7 @@ METRICS = {
     "between_cos": 0.3,
     "gap": 0.2,
     "lr_acc": 0.9,
+    "lr_eval": "holdout",
     "ari": 0.8,
     "ari_sd": 0.01,
     "nmi": 0.95,
@@ -68,6 +69,7 @@ def test_csv_columns_are_exactly_the_brief_schema():
         "between_cos",
         "gap",
         "lr_acc",
+        "lr_eval",
         "ari",
         "ari_sd",
         "nmi",
@@ -140,3 +142,12 @@ def test_row_exists_and_load_results_types(tmp_path):
     )
     assert df["lambda"].iloc[0] == 0.1 and df["seed"].dtype.kind == "i"
     assert load_results(tmp_path / "nope").empty
+
+
+def test_lr_eval_column_is_a_string_and_tolerates_absence(tmp_path):
+    """lr_eval records the LR recipe; rows without it (older CSVs) load as empty."""
+    append_row(_row(metrics={**METRICS, "lr_eval": "cv"}), tmp_path)
+    without = {k: v for k, v in METRICS.items() if k != "lr_eval"}
+    append_row(_row(corpus="mmlu", metrics=without), tmp_path)
+    df = load_results(tmp_path)
+    assert list(df["lr_eval"]) == ["cv", ""]

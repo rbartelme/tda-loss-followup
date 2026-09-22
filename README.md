@@ -126,7 +126,7 @@ for the MedCPT rows.
 ## Layout
 
 ```
-configs/          base.yaml (every knob), models.yaml, exp1–4, reference.yaml
+configs/          base.yaml (every knob), experiments.yaml (grid-wide overrides: CV LR), models.yaml, exp1–4, reference.yaml
 src/tlf/
   data.py         corpus loaders reproducing the bakeoff eval sample; pair construction
   features.py     the six textstat features, verbatim from the bakeoff
@@ -148,8 +148,10 @@ data/ checkpoints/ embeddings/   gitignored artifacts, each with a manifest.json
 - Mapper parameters, textstat features, the 25-seed bootstrap, the Layer 1
   sampling and the LR classifier are the bakeoff's, unchanged. Where a value
   can differ it is a config field whose default is the bakeoff's: the Layer 1
-  LR is the single 80/20 holdout by default (`eval.lr_eval: cv` opts into
-  k-fold), evaluation encoding is 256 tokens while training uses 128.
+  LR is the single 80/20 holdout in `base.yaml`, which `make repro-check`
+  uses; the four experiment grids inherit `configs/experiments.yaml`, which
+  switches it to stratified 5-fold CV (the CSV's `lr_eval` column says which),
+  and evaluation encoding is 256 tokens while training uses 128.
 - `ari_sd` did not exist in the first post; it is the standard deviation of
   the same 300 pairwise ARIs whose mean the post reported.
 - The two corpora share a label schema (`source_subset`, `source_domain`) but

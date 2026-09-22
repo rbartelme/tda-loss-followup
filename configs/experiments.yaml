@@ -1,0 +1,12 @@
+# Shared by the four experiment grids (exp1-4), layered over base.yaml.
+# Anything here differs deliberately from the first post's recipe, which
+# base.yaml keeps so `make repro-check` compares like with like. The metrics
+# cache (embeddings/<run>/ckpt_*/<corpus>.metrics.json) keys on the eval
+# section, so the grids must share it: put experiment-wide eval changes here,
+# never in an individual exp*.yaml.
+base: configs/base.yaml
+
+eval:
+  # Layer 1 LR accuracy: stratified 5-fold CV (protocol), not the bakeoff's
+  # single 80/20 holdout. The CSV records which in `lr_eval`.
+  lr_eval: cv

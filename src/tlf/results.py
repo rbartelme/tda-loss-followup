@@ -143,6 +143,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "between_cos",
     "gap",
     "lr_acc",
+    "lr_eval",
     "ari",
     "ari_sd",
     "nmi",
@@ -157,7 +158,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "timestamp",
 )
 KEY_COLUMNS: tuple[str, ...] = CSV_COLUMNS[:10]
-METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[10:24]
+METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[10:25]
 NUMERIC_COLUMNS: tuple[str, ...] = tuple(
     c
     for c in CSV_COLUMNS
@@ -169,6 +170,7 @@ NUMERIC_COLUMNS: tuple[str, ...] = tuple(
         "pair_set",
         "aux",
         "corpus",
+        "lr_eval",
         "disintegrated",
         "git_sha",
         "timestamp",
@@ -247,7 +249,8 @@ def make_row(
         ckpt_frac: Checkpoint fraction.
         seed: Training seed.
         corpus: Evaluation corpus.
-        metrics: Dict from ``evaluate_checkpoint``; missing metrics become NaN.
+        metrics: Dict from ``evaluate_checkpoint``; missing metrics become NaN
+            (``lr_eval``, the LR recipe name, becomes the empty string).
 
     Returns:
         A dict with exactly ``CSV_COLUMNS``.
@@ -266,6 +269,9 @@ def make_row(
         "corpus": corpus,
     }
     for c in METRIC_COLUMNS:
+        if c == "lr_eval":
+            row[c] = str(metrics.get(c, ""))
+            continue
         v = metrics.get(c, nan)
         row[c] = bool(v) if c == "disintegrated" else v
     row["git_sha"] = git_sha()
@@ -348,7 +354,8 @@ def load_results(
 
     Returns:
         A frame with ``CSV_COLUMNS``: numeric columns as floats (``seed`` as
-        int), ``disintegrated`` as bool, ``aux`` empty string for none. Empty
+        int), ``disintegrated`` as bool, ``aux`` empty string for none,
+        ``lr_eval`` empty for CSVs written before that column existed. Empty
         when nothing is on disk.
     """
     results_dir = Path(results_dir)

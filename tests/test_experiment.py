@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tlf.config import load_config
+from tlf.evaluate import eval_fingerprint
 from tlf.experiment import Run, checkpoint_fracs, checkpoint_root, expand_grid, plan
 
 CONFIGS = Path(__file__).resolve().parents[1] / "configs"
@@ -88,3 +89,19 @@ def test_base_aux_schedule_does_not_leak_into_the_grid():
     runs = expand_grid(cfg)
     assert all(r.aux is None and r.lam == 0.0 for r in runs)
     assert runs[0].id == "minilm_mnrl_tau0.01_random_s0"
+
+
+def test_experiment_grids_share_one_eval_section_with_cv_lr():
+    """exp1-4 share experiments.yaml (CV LR, one cache fingerprint); base.yaml stays holdout."""
+    fingerprints = set()
+    for name in (
+        "exp1_tau_sweep",
+        "exp2_loss_family",
+        "exp3_data_vs_loss",
+        "exp4_topo_aux",
+    ):
+        cfg = load_config(CONFIGS / f"{name}.yaml")
+        assert cfg["eval"]["lr_eval"] == "cv"
+        fingerprints.add(eval_fingerprint(cfg))
+    assert len(fingerprints) == 1
+    assert load_config(CONFIGS / "base.yaml")["eval"]["lr_eval"] == "holdout"
