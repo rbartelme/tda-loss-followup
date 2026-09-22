@@ -1,7 +1,11 @@
 # Loss Functions vs. Topology: Experiment Protocol
 
-**Status: work in progress.** The protocol below is as written; the discrepancies
-between it and the scaffold as built are listed under *To be resolved* at the end.
+**Status: walk-through complete, experiments not yet run.** The protocol below is
+as written on 2026-09-21; the discrepancies between it and the scaffold as built
+are listed under *To be resolved* at the end. Items 1–6, 9 and 10 were resolved on
+2026-09-22, each struck through with a dated resolution and its own commit; items
+7 (HF Hub push) and 8 (compute budget) are deferred until the experiments run on
+the DGX Spark.
 
 Follow-up to *Beyond MTEB: A Topology-Aware Embedder Bake-Off*. The first post argued
 that training regime, not architecture, determines whether an encoder's output manifold
@@ -260,5 +264,12 @@ Differences between this protocol, the scaffold brief, and the code as built
    falling back to the plain label otherwise. The continued-MLM control in
    Exp 2 batches unique texts rather than pairs, so its schedule differs;
    the columns make that visible without a trip to the manifests.
-10. **`bge-base`** is in the roster as optional and in `models.yaml`; it is
-    not in any experiment grid yet.
+10. ~~**`bge-base`** is in the roster as optional and in `models.yaml`; it is
+    not in any experiment grid yet.~~
+    **Resolved 2026-09-22.** In Exp 1's grid (now 12 runs). Against
+    `biomedbert-fulltext` it holds the architecture fixed and varies only the
+    pretraining regime, the first post's central claim tested directly;
+    against `minilm` it asks whether the contrastive ρ floor depends on
+    model size. Execution is staged with `--model`: the two core models
+    first, `bge-base` when time allows. `make repro-check` now covers all
+    three starting encoders against `reference.yaml`.
