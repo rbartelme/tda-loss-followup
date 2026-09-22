@@ -733,6 +733,15 @@ def main() -> None:
         action="store_true",
         help="3 seeds, 50 texts, random-projection encoder, both corpora",
     )
+    ap.add_argument(
+        "--reference",
+        default=None,
+        metavar="KEY",
+        help="print the first post's row for this key from configs/reference.yaml beside ours",
+    )
+    ap.add_argument(
+        "--reference-file", type=Path, default=Path("configs/reference.yaml")
+    )
     args = ap.parse_args()
     logging.basicConfig(
         level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
@@ -763,13 +772,60 @@ def main() -> None:
             n_texts=n_texts,
             with_router=not args.no_router,
         )
-    print(f"{'metric':<18}" + "".join(f"{c:>14}" for c in corpora))
+    reference = None
+    if args.reference:
+        import yaml
+
+        with args.reference_file.open() as f:
+            reference = (yaml.safe_load(f) or {}).get(args.reference)
+        if reference is None:
+            raise SystemExit(f"{args.reference!r} not in {args.reference_file}")
+    print_results(results, corpora, reference)
+
+
+def print_results(
+    results: dict[str, dict[str, Any]],
+    corpora: Sequence[str],
+    reference: dict[str, Any] | None = None,
+) -> None:
+    """Print the core metrics per corpus, optionally beside a reference row.
+
+    Args:
+        results: Corpus to ``evaluate_checkpoint`` output.
+        corpora: Column order.
+        reference: A ``reference.yaml`` entry (``{corpus: {metric: value}}``);
+            when given, each corpus shows ``ours``, ``ref`` and ``delta``.
+    """
+    if reference is None:
+        print(f"{'metric':<18}" + "".join(f"{c:>14}" for c in corpora))
+        for k in CORE_KEYS:
+            vals = []
+            for c in corpora:
+                v = results[c].get(k, float("nan"))
+                vals.append(
+                    f"{v!s:>14}" if isinstance(v, bool) else f"{float(v):>14.4f}"
+                )
+            print(f"{k:<18}" + "".join(vals))
+        return
+    head = "".join(f"{c + ' ours':>16}{'ref':>10}{'delta':>10}" for c in corpora)
+    print(f"{'metric':<18}{head}")
     for k in CORE_KEYS:
-        vals = []
+        cells = []
         for c in corpora:
-            v = results[c].get(k, float("nan"))
-            vals.append(f"{v:>14}" if isinstance(v, bool) else f"{float(v):>14.4f}")
-        print(f"{k:<18}" + "".join(vals))
+            ours = results[c].get(k, float("nan"))
+            ref = (reference.get(c) or {}).get(k)
+            if isinstance(ours, bool) or isinstance(ref, bool):
+                cells.append(
+                    f"{ours!s:>16}{str(ref) if ref is not None else '-':>10}{'':>10}"
+                )
+                continue
+            o = float(ours)
+            if ref is None:
+                cells.append(f"{o:>16.4f}{'-':>10}{'':>10}")
+            else:
+                r = float(ref)
+                cells.append(f"{o:>16.4f}{r:>10.4f}{o - r:>+10.4f}")
+        print(f"{k:<18}" + "".join(cells))
 
 
 if __name__ == "__main__":

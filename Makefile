@@ -7,7 +7,7 @@ N_WORKERS ?=
 
 WORKERS_FLAG := $(if $(N_WORKERS),--n-workers $(N_WORKERS),)
 
-.PHONY: pairs dry-run eval-smoke exp1-final exp1 exp2 exp3 exp4 figures test lint
+.PHONY: pairs dry-run eval-smoke repro-check exp1-final exp1 exp2 exp3 exp4 figures test lint
 
 pairs:
 	$(UV) python scripts/build_pairs.py --config configs/base.yaml --kind random     --n $(N_PAIRS) --seed $(SEED)
@@ -19,6 +19,12 @@ dry-run:
 
 eval-smoke:
 	$(UV) python -m tlf.evaluate --config configs/base.yaml --smoke $(WORKERS_FLAG)
+
+# Reproduction check: the untrained starting encoders must reproduce the first
+# post's rows (configs/reference.yaml) before any fine-tune result is trusted.
+repro-check:
+	$(UV) python -m tlf.evaluate --config configs/base.yaml --ckpt microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext --reference biomedbert-fulltext $(WORKERS_FLAG)
+	$(UV) python -m tlf.evaluate --config configs/base.yaml --ckpt sentence-transformers/all-MiniLM-L6-v2 --reference minilm $(WORKERS_FLAG)
 
 exp1-final:
 	$(UV) python scripts/run_experiment.py --config configs/exp1_tau_sweep.yaml --only-final --resume $(WORKERS_FLAG)
