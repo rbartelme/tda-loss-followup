@@ -29,6 +29,7 @@ eval-smoke:
 repro-check:
 	$(UV) python -m tlf.evaluate --config configs/base.yaml --ckpt microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext --reference biomedbert-fulltext $(WORKERS_FLAG)
 	$(UV) python -m tlf.evaluate --config configs/base.yaml --ckpt sentence-transformers/all-MiniLM-L6-v2 --reference minilm $(WORKERS_FLAG)
+	$(UV) python -m tlf.evaluate --config configs/base.yaml --ckpt BAAI/bge-base-en-v1.5 --reference bge-base $(WORKERS_FLAG)
 
 exp1-final:
 	$(UV) python scripts/run_experiment.py --config configs/exp1_tau_sweep.yaml --only-final --resume $(WORKERS_FLAG) $(EXP_FLAGS)

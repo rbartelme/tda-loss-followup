@@ -17,7 +17,7 @@ run's total; the post is written from those CSVs.
 
 | | question | grid |
 |---|---|---|
-| **Exp 1** temperature | does τ alone move the topology? | `minilm`, `biomedbert-fulltext` × MNRL × τ ∈ {0.01, 0.05, 0.2, 1.0}, random pairs |
+| **Exp 1** temperature | does τ alone move the topology? | `minilm`, `biomedbert-fulltext`, `bge-base` × MNRL × τ ∈ {0.01, 0.05, 0.2, 1.0}, random pairs |
 | **Exp 2** loss family | same data and τ, different objective | `biomedbert-fulltext` × {MNRL, triplet, CoSENT, MLM} at τ = 0.05 |
 | **Exp 3** data vs loss | does the pair set matter more than the loss? | `biomedbert-fulltext` × MNRL × {matched, mismatched, random} pairs, against the MedCPT reference row |
 | **Exp 4** topological auxiliaries | can an explicit topology term buy faithfulness? | `biomedbert-fulltext` × MNRL + λ·{textstat head, distance preservation, persist0 H0, TopoAE H0}, λ ∈ {0.1, 1.0} |
@@ -67,7 +67,7 @@ make exp1-final    # Exp 1, evaluating only ckpt_0.0 and ckpt_1.0
 | `pairs` | builds `data/pairs/{random,matched,mismatched}_s$(SEED)/pairs.parquet` (default `N_PAIRS=20000`, `SEED=0`) |
 | `dry-run` | `python -m tlf.train --dry-run` (`LOSS=mnrl\|triplet\|cosent\|mlm`) |
 | `eval-smoke` | `python -m tlf.evaluate --smoke` |
-| `repro-check` | evaluates the two untrained starting encoders and prints them beside `configs/reference.yaml` |
+| `repro-check` | evaluates the three untrained starting encoders and prints them beside `configs/reference.yaml` |
 | `exp1-final` | Exp 1 with `--only-final` |
 | `exp1` | the temperature sweep, all five checkpoints |
 | `exp2` `exp3` `exp4` | the loss-family, data and auxiliary grids at init and final only, as the protocol asks; run `scripts/run_experiment.py` without `--only-final` for all five |

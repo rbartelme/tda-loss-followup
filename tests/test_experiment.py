@@ -24,7 +24,7 @@ CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 @pytest.mark.parametrize(
     ("name", "n_runs"),
     [
-        ("exp1_tau_sweep", 8),
+        ("exp1_tau_sweep", 12),
         ("exp2_loss_family", 4),
         ("exp3_data_vs_loss", 3),
         ("exp4_topo_aux", 8),
@@ -130,11 +130,13 @@ def test_model_and_tau_filters_intersect(tmp_path):
         "minilm_mnrl_tau0.2_random_s0",
         "biomedbert-fulltext_mnrl_tau0.01_random_s0",
         "biomedbert-fulltext_mnrl_tau0.2_random_s0",
+        "bge-base_mnrl_tau0.01_random_s0",
+        "bge-base_mnrl_tau0.2_random_s0",
     ]
     assert select_runs(runs) == runs and select_runs(runs, models=[], taus=[]) == runs
     items = plan(cfg, models=["minilm"], taus=[0.05])
     assert [it["run"].id for it in items] == ["minilm_mnrl_tau0.05_random_s0"]
-    assert plan(cfg, models=["bge-base"]) == []
+    assert plan(cfg, models=["medcpt-query"]) == []  # reference only, not in the grid
 
 
 def test_checkpoint_steps_come_from_the_manifests(tmp_path):
