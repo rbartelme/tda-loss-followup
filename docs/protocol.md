@@ -240,6 +240,14 @@ Differences between this protocol, the scaffold brief, and the code as built
    evaluations at 8 workers) implies about 3.5 min each. A 10× gap;
    `make repro-check` measures it on the current machine before Spark time
    is booked.
+   **Deferred 2026-09-22.** A wall-clock question, so it is measured where
+   the sweep will run: `make repro-check` on the DGX Spark once it is online
+   (this week), at the worker count the sweep will use, with the two corpora
+   concurrent. That run is also order-of-operations step 1 (reproduce the
+   first post's ARI / ρ within ±0.005; drift would be a library-version
+   story, since the eval code is the bakeoff's verbatim). The laptop
+   (16 cores, 54 GB, RTX 4070 8 GB) stays for training and smoke runs. The
+   compute section is rewritten from the measured number afterwards.
 9. **Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
    of training, which is how checkpoints are defined; both models take the
    same number of steps on the same pair set, so a step axis is a relabel.
