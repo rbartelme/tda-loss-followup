@@ -225,6 +225,16 @@ Differences between this protocol, the scaffold brief, and the code as built
    Complexity, the router's other axis, is what anchor ρ measures.
 7. **HF Hub push of trained checkpoints.** In the deliverables, not built.
    Needs a namespace and a choice of final-only versus all fractions.
+   **Deferred 2026-09-22** until the experiments have run: nothing to push
+   before then, and the login lives on whichever machine pushes. Shape
+   agreed in principle: `scripts/push_hub.py` and `make push-hub`, one model
+   repo per run (`<namespace>/tlf-<run_id>`), the final checkpoint at the
+   repo root and any other pushed fraction as a `ckpt_<frac>` branch, with
+   the run and checkpoint manifests, the train log and a model card carrying
+   the run's CSV rows. Selection rule to confirm then: every checkpoint with
+   a CSV row (about 45 checkpoints, ~14 GB) rather than final only (~7.5 GB)
+   or all fractions (~30 GB). Untrained checkpoints are the public base
+   models and are not pushed. Still open: namespace, public vs. private.
 8. **Compute budget.** Protocol: ~40 min (SciCUEval) + ~25 min (MMLU) per
    row. The bakeoff README's own figure (~100 min for 28 encoder-corpus
    evaluations at 8 workers) implies about 3.5 min each. A 10× gap;
