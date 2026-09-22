@@ -65,7 +65,7 @@ extend-exclude = ["src/tlf/_bakeoff"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "D"]
-ignore = ["E501"]
+ignore = ["E501", "D107"]  # D107: __init__ args are documented on the class
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

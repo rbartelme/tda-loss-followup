@@ -8,6 +8,12 @@ pair_set: random
 aux: [textstat_head, dist_preserve, persist0_h0]
 lambda: [0.1, 1.0]
 aux_params:
+  # ref_scale brings the fixed textstat-distance reference onto the live
+  # cosine-distance scale: match_mean (equal mean pairwise distance, default),
+  # none (raw), or a float multiplier. See tlf.losses.scale_reference.
+  dist_preserve:
+    ref_scale: match_mean
   persist0_h0:
-    top_k: 32   # TopoH0Loss(top_k=...); confirmed against persist0-tda 0.2.0 in Task 4
+    top_k: 32              # persist0.TopoH0Loss(top_k): k most persistent H0 bars of the 63
+    ref_scale: match_mean
 corpora: [scicueval, mmlu]
