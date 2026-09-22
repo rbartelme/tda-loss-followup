@@ -86,9 +86,12 @@ anything; `--force` redoes everything.
   the bakeoff's `encode_all` at `max_length 256`, batch 32.
 - **Mapper sweeps run on Spark.** UMAP single-threads itself when seeded, so
   the 25-seed bootstrap is parallelised across forked worker processes. The
-  bakeoff measured about 100 minutes for 28 (encoder, corpus) evaluations at
-  8 workers, roughly 3.5 minutes each. Exp 1 with `--only-final` is 32 such
-  evaluations; the full Exp 1 is 80. On Spark use `make exp1 N_WORKERS=20`.
+  bakeoff's README reports about 100 minutes for 28 (encoder, corpus)
+  evaluations at 8 workers; `docs/protocol.md` budgets more conservatively at
+  about 40 minutes per SciCUEval row and 25 per MMLU row, roughly 60 hours for
+  the whole sweep on 8 workers or 20–25 on the DGX Spark at 20. Exp 1 with
+  `--only-final` is 32 evaluations; the full Exp 1 is 80. On Spark use
+  `make exp1 N_WORKERS=20`.
   The distance matrix is 4000 × 4000 float64 per worker under copy-on-write,
   so memory is not the constraint; cores are.
 - Training wall time has not been measured yet; the dry-run only proves the
@@ -109,8 +112,8 @@ prints, for `biomedbert-fulltext` and `minilm` on both corpora, this repo's
 Layer 1–3 numbers beside the rows in `configs/reference.yaml` (which were
 read from the bakeoff's cached metrics at commit `4625b22`). Every stage is
 seeded the way the bakeoff seeded it (sample seed 42, evaluation seed 42,
-bootstrap seeds 42–66), so agreement should be to three decimals or better.
-A larger difference means the evaluation sample or the encoding differs, and
+bootstrap seeds 42–66). The protocol's tolerance is ±0.005 on ARI and ρ. A
+larger difference means the evaluation sample or the encoding differs, and
 nothing downstream should be run until it is explained. See
 `docs/harness-notes.md` §1 for why the sample must be byte-identical and §8
 for the MedCPT rows.
@@ -154,8 +157,6 @@ data/ checkpoints/ embeddings/   gitignored artifacts, each with a manifest.json
 - The pair builder samples anchors without replacement and only reuses an
   anchor once every anchor has been used; at 20 000 pairs from 7 343 train
   rows each appears about 2.7 times. Batches never contain the same id twice.
-- `docs/protocol.md` is a stand-in assembled from the scaffold brief until the
-  source protocol document is placed in the repo.
 
 ## License
 
