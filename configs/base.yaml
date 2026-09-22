@@ -17,6 +17,7 @@ paths:
   checkpoints: checkpoints
   embeddings: embeddings
   results: results
+  models_yaml: configs/models.yaml
 
 corpus:
   prompt_field: question
@@ -33,18 +34,29 @@ pairs:
 
 train:
   max_length: 128
-  batch_size: 128
+  batch_size: 128        # effective (in-batch negatives) batch
+  micro_batch: 32        # memory knob only: gradient-cache mini-batch for mnrl,
+                         # accumulation micro-batch for triplet/cosent/mlm
   lr: 2.0e-5
   warmup_ratio: 0.1
   epochs: 3
   weight_decay: 0.01
+  max_grad_norm: 1.0
   bf16: true
+  device: auto
   checkpoint_fracs: [0.0, 0.1, 0.25, 0.5, 1.0]
-  log_every: 1
+  mlm_probability: 0.15  # loss=mlm only
+  print_every: 10        # console; train_log.csv is written every step
+
+loss_params:
+  # sentence-transformers defaults, recorded here so they are config, not code.
+  triplet: {distance: euclidean, margin: 5.0}
+  cosent: {scale: 20.0}
 
 aux:
   subsample: 64   # aux loss computed on this many random rows of each batch
   every: 1        # ... every N optimizer steps
+  lr: null        # learning rate for aux-loss parameters; null = train.lr
 
 eval:
   # Encoding for evaluation matches the bakeoff, not the training length.

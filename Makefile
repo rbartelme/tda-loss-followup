@@ -7,12 +7,15 @@ N_WORKERS ?=
 
 WORKERS_FLAG := $(if $(N_WORKERS),--n-workers $(N_WORKERS),)
 
-.PHONY: pairs exp1-final exp1 exp2 exp3 exp4 figures test lint
+.PHONY: pairs dry-run exp1-final exp1 exp2 exp3 exp4 figures test lint
 
 pairs:
 	$(UV) python scripts/build_pairs.py --config configs/base.yaml --kind random     --n $(N_PAIRS) --seed $(SEED)
 	$(UV) python scripts/build_pairs.py --config configs/base.yaml --kind matched    --n $(N_PAIRS) --seed $(SEED)
 	$(UV) python scripts/build_pairs.py --config configs/base.yaml --kind mismatched --n $(N_PAIRS) --seed $(SEED)
+
+dry-run:
+	$(UV) python -m tlf.train --config configs/base.yaml --dry-run --loss $(or $(LOSS),mnrl)
 
 exp1-final:
 	$(UV) python scripts/run_experiment.py --config configs/exp1_tau_sweep.yaml --only-final --resume $(WORKERS_FLAG)
