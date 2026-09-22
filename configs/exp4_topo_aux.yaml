@@ -5,7 +5,7 @@ models: [biomedbert-fulltext]
 loss: mnrl
 tau: 0.05
 pair_set: random
-aux: [textstat_head, dist_preserve, persist0_h0]
+aux: [textstat_head, dist_preserve, persist0_h0, topoae_h0]   # the last two are an A/B: sorted H0 deaths vs. TopoAE's pairing form
 lambda: [0.1, 1.0]
 aux_params:
   # ref_scale brings the fixed textstat-distance reference onto the live
@@ -16,4 +16,6 @@ aux_params:
   persist0_h0:
     top_k: 32              # persist0.TopoH0Loss(top_k): k most persistent H0 bars of the 63
     ref_scale: match_mean
+  topoae_h0:
+    ref_scale: match_mean  # all 63 MST edges, distances at each space's own pairs, both directions (Moor et al. 2020, H0)
 corpora: [scicueval, mmlu]

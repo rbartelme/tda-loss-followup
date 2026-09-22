@@ -26,7 +26,7 @@ CONFIGS = Path(__file__).resolve().parents[1] / "configs"
         ("exp1_tau_sweep", 8),
         ("exp2_loss_family", 4),
         ("exp3_data_vs_loss", 3),
-        ("exp4_topo_aux", 6),
+        ("exp4_topo_aux", 8),
     ],
 )
 def test_grid_sizes_match_the_protocol(name, n_runs):

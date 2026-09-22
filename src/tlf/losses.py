@@ -6,8 +6,13 @@ gradient) and ``texts`` are the matching raw texts. Textstat targets are
 computed from the texts on the fly, memoised per text, and standardized with
 the train-split statistics the pair builder used.
 
-The two distance-based losses compare a live cosine-distance matrix to a
-fixed reference built from standardized textstat vectors. Those live on
+The distance-based losses (``dist_preserve``, ``persist0_h0``, ``topoae_h0``)
+compare a live cosine-distance matrix to a fixed reference built from
+standardized textstat vectors. ``persist0_h0`` and ``topoae_h0`` are an A/B:
+both take H0 (MST) pairs from ``persist0``; the first matches the sorted
+death vector, which is invariant to *which* points a bar joins, the second is
+TopoAE's exact form, distances at each space's own MST edges in both
+directions, which is not. Those live on
 different scales (cosine distance is bounded by 2; textstat Euclidean
 distance is not), so both take a ``ref_scale`` policy. The default,
 ``"match_mean"``, rescales the reference so its mean pairwise distance equals
@@ -26,12 +31,17 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn.functional as F
-from persist0 import TopoH0Loss
+from persist0 import TopoH0Loss, h0_persistence
 from torch import Tensor, nn
 
 from tlf.features import FEATURE_NAMES, textstat_vector
 
-AUX_LOSS_NAMES: tuple[str, ...] = ("textstat_head", "dist_preserve", "persist0_h0")
+AUX_LOSS_NAMES: tuple[str, ...] = (
+    "textstat_head",
+    "dist_preserve",
+    "persist0_h0",
+    "topoae_h0",
+)
 RefScale = str | float
 
 
@@ -340,6 +350,80 @@ class Persist0H0Loss(AuxLoss):
             return self.from_distances(D_live, D_ref)
 
 
+class TopoAEH0Loss(AuxLoss):
+    """TopoAE's topological term: distances at each space's own MST edges, both ways.
+
+    The exact form of Moor et al. (2020) in dimension 0, which is all the
+    original uses. With ``pi_live`` and ``pi_ref`` the death edges (MST pairs)
+    that ``persist0.h0_persistence`` selects in each space::
+
+        L = mse(D_live[pi_ref], D_ref[pi_ref]) + mse(D_live[pi_live], D_ref[pi_live])
+
+    Unlike ``Persist0H0Loss`` this is not invariant to which points a bar
+    joins: the two agree on the multiset of MST edge lengths, and only this
+    one also asks for the same pairs. Exp 4 runs both for that reason. All
+    ``n - 1`` edges are used; the gradient reaches the encoder through the
+    gathered entries, as in ``Persist0H0Loss``.
+
+    Args:
+        mu: Train-split textstat means.
+        sd: Train-split textstat standard deviations.
+        ref_scale: See ``scale_reference``.
+    """
+
+    name = "topoae_h0"
+
+    def __init__(
+        self, mu: np.ndarray, sd: np.ndarray, ref_scale: RefScale = "match_mean"
+    ) -> None:
+        super().__init__()
+        self.targets = TextstatTargets(mu, sd)
+        self.ref_scale = ref_scale
+
+    def from_distances(self, D_live: Tensor, D_ref: Tensor) -> Tensor:
+        """The loss given both distance matrices.
+
+        Args:
+            D_live: ``(n, n)`` symmetric, zero-diagonal, with gradient.
+            D_ref: ``(n, n)`` symmetric, zero-diagonal (scaled inside).
+
+        Returns:
+            Scalar loss; zero when ``n < 2``.
+        """
+        n = D_live.shape[0]
+        if n < 2:
+            return D_live.sum() * 0.0
+        D_ref = scale_reference(D_live, D_ref, self.ref_scale)
+        live = D_live.float().unsqueeze(0)
+        ref = D_ref.float().unsqueeze(0)
+        idx_live, live_at_live = h0_persistence(live)
+        with torch.no_grad():
+            idx_ref, ref_at_ref = h0_persistence(ref)
+        il, jl = idx_live[0, :, 0], idx_live[0, :, 1]
+        ir, jr = idx_ref[0, :, 0], idx_ref[0, :, 1]
+        return F.mse_loss(live[0, ir, jr], ref_at_ref[0]) + F.mse_loss(
+            live_at_live[0], ref[0, il, jl]
+        )
+
+    def forward(self, embeddings: Tensor, texts: Sequence[str]) -> Tensor:
+        """Build both matrices from the subsample and compare them at MST edges.
+
+        Args:
+            embeddings: ``(n, d)`` with gradient.
+            texts: ``n`` raw texts.
+
+        Returns:
+            Scalar loss.
+        """
+        with _no_autocast(embeddings.device):
+            D_live = cosine_distance_matrix(embeddings)
+            with torch.no_grad():
+                D_ref = euclidean_distance_matrix(
+                    self.targets(texts, embeddings.device)
+                )
+            return self.from_distances(D_live, D_ref)
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -361,8 +445,9 @@ def build_aux_loss(
         ts_mu: Train-split textstat means, shape ``(6,)``.
         ts_sd: Train-split textstat standard deviations, shape ``(6,)``.
         params: Loss-specific parameters from ``aux_params.<name>`` in the
-            config: ``ref_scale`` for ``dist_preserve``; ``top_k`` and
-            ``ref_scale`` for ``persist0_h0``; none for ``textstat_head``.
+            config: ``ref_scale`` for ``dist_preserve`` and ``topoae_h0``;
+            ``top_k`` and ``ref_scale`` for ``persist0_h0``; none for
+            ``textstat_head``.
 
     Returns:
         An ``AuxLoss`` module.
@@ -383,5 +468,9 @@ def build_aux_loss(
             ts_sd,
             top_k=params.get("top_k", 32),
             ref_scale=params.get("ref_scale", "match_mean"),
+        )
+    if name == "topoae_h0":
+        return TopoAEH0Loss(
+            ts_mu, ts_sd, ref_scale=params.get("ref_scale", "match_mean")
         )
     raise ValueError(f"unknown aux loss {name!r}; expected one of {AUX_LOSS_NAMES}")

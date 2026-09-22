@@ -19,7 +19,7 @@ checkpoint, corpus); the post is written from those CSVs.
 | **Exp 1** temperature | does τ alone move the topology? | `minilm`, `biomedbert-fulltext` × MNRL × τ ∈ {0.01, 0.05, 0.2, 1.0}, random pairs |
 | **Exp 2** loss family | same data and τ, different objective | `biomedbert-fulltext` × {MNRL, triplet, CoSENT, MLM} at τ = 0.05 |
 | **Exp 3** data vs loss | does the pair set matter more than the loss? | `biomedbert-fulltext` × MNRL × {matched, mismatched, random} pairs, against the MedCPT reference row |
-| **Exp 4** topological auxiliaries | can an explicit topology term buy faithfulness? | `biomedbert-fulltext` × MNRL + λ·{textstat head, distance preservation, persist0 H0}, λ ∈ {0.1, 1.0} |
+| **Exp 4** topological auxiliaries | can an explicit topology term buy faithfulness? | `biomedbert-fulltext` × MNRL + λ·{textstat head, distance preservation, persist0 H0, TopoAE H0}, λ ∈ {0.1, 1.0} |
 
 Every run saves checkpoints at fractions {0, 0.1, 0.25, 0.5, 1.0} of training;
 each checkpoint is evaluated on SciCUEval (in-domain) and MMLU non-STEM
@@ -139,7 +139,7 @@ src/tlf/
   data.py         corpus loaders reproducing the bakeoff eval sample; pair construction
   features.py     the six textstat features, verbatim from the bakeoff
   train.py        fine-tune driver: MNRL (cached), triplet, CoSENT, MLM; checkpoints; aux hook
-  losses.py       textstat head, distance preservation, persist0 H0 (from PyPI persist0-tda)
+  losses.py       textstat head, distance preservation, persist0 H0 and TopoAE H0 (pairs from PyPI persist0-tda)
   evaluate.py     layers 1–4 per checkpoint, embedding + metrics caches, --smoke
   experiment.py   config grid → runs → train → evaluate → rows
   results.py      CSV schema, idempotent append, manifests
@@ -166,9 +166,14 @@ data/ checkpoints/ embeddings/   gitignored artifacts, each with a manifest.json
   no label values, which is why the router uses a union label space.
   `eval.router.mode: per_corpus` and `label: domain` are the alternatives.
 - Cosine distance is bounded by 2 and standardized textstat distance is not,
-  so the two distance-based auxiliaries rescale their fixed reference onto the
-  live scale (`ref_scale: match_mean`; `none` is the literal comparison).
+  so the three distance-based auxiliaries rescale their fixed reference onto
+  the live scale (`ref_scale: match_mean`; `none` is the literal comparison).
   Rescaling never changes the reference's MST, only its units.
+- `persist0_h0` and `topoae_h0` are an A/B. Both take H0 (MST) pairs from
+  persist0; the first matches the sorted death vector, which is invariant to
+  which points a bar joins, the second is TopoAE's exact form (Moor et al.
+  2020, dimension 0), distances at each space's own MST edges in both
+  directions. The comparison isolates whether pairing information matters.
 - The pair builder samples anchors without replacement and only reuses an
   anchor once every anchor has been used; at 20 000 pairs from 7 343 train
   rows each appears about 2.7 times. Batches never contain the same id twice.

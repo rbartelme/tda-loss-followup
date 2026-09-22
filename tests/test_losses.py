@@ -12,6 +12,7 @@ from tlf.losses import (
     DistancePreserveLoss,
     Persist0H0Loss,
     TextstatHeadLoss,
+    TopoAEH0Loss,
     build_aux_loss,
     cosine_distance_matrix,
     scale_reference,
@@ -115,6 +116,35 @@ def test_persist0_h0_positive_and_differentiable_when_matrices_differ(stats):
     value.backward()
     assert live.grad is not None and live.grad.abs().sum() > 0
     # gradient touches only MST death edges: at most 2*(N-1) non-zero entries (symmetric)
+    assert int((live.grad != 0).sum()) <= 2 * (N - 1)
+
+
+@pytest.mark.parametrize("ref_scale", ["match_mean", "none", 1.0])
+def test_topoae_h0_is_zero_when_live_equals_ref(ref_scale, stats):
+    """Identical distance matrices select the same MST edges and give exactly zero."""
+    mu, sd = stats
+    loss_fn = TopoAEH0Loss(mu, sd, ref_scale=ref_scale)
+    Dm = _random_distance_matrix(N, 6)
+    assert float(loss_fn.from_distances(Dm.clone().requires_grad_(True), Dm)) == 0.0
+
+
+def test_topoae_h0_sees_pairings_that_persist0_h0_ignores(stats):
+    """Relabelling the points keeps the sorted death vector but moves the MST edges.
+
+    This is the difference the Exp 4 A/B measures: persist0_h0 is exactly zero
+    on a permuted copy of its reference, TopoAE is not.
+    """
+    mu, sd = stats
+    Dm = _random_distance_matrix(N, 7)
+    p = torch.randperm(N, generator=torch.Generator().manual_seed(0))
+    live = Dm[p][:, p].clone().requires_grad_(True)
+    sorted_form = Persist0H0Loss(mu, sd, top_k=None, ref_scale="none")
+    assert float(sorted_form.from_distances(live, Dm)) == 0.0
+    value = TopoAEH0Loss(mu, sd, ref_scale="none").from_distances(live, Dm)
+    assert float(value) > 0
+    value.backward()
+    assert live.grad is not None and live.grad.abs().sum() > 0
+    # gradient touches only the two edge sets, one-sided: at most 2*(N-1) entries
     assert int((live.grad != 0).sum()) <= 2 * (N - 1)
 
 

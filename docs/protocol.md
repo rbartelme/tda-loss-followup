@@ -180,7 +180,7 @@ Differences between this protocol, the scaffold brief, and the code as built
    selection that matches nothing is an error naming the grid's values.
    `make exp1 EXP_FLAGS="--tau 0.01 --tau 0.05"` passes them through, and
    `--dry-run` shows the selected runs first.
-5. **Persistent-homology regularizer.** Protocol: TopoAE loss or RTD. Built:
+5. ~~**Persistent-homology regularizer.** Protocol: TopoAE loss or RTD. Built:
    persist0 `TopoH0Loss`, which matches sorted H0 death vectors (MST edge
    lengths) between the cosine-distance matrix of the embedding subsample and
    the Euclidean textstat-distance matrix, with the reference rescaled onto
@@ -188,7 +188,17 @@ Differences between this protocol, the scaffold brief, and the code as built
    TopoAE proper evaluates distances at the pairings selected in each space
    rather than comparing sorted death vectors. persist0 returns the pairing
    indices, so the exact TopoAE form is a small addition if wanted as a
-   fourth auxiliary. RTD is not built.
+   fourth auxiliary. RTD is not built.~~
+   **Resolved 2026-09-22.** A/B. `persist0_h0` stays (it is validated against
+   Ripser for H0/MST features) and exact TopoAE joins it as a fourth
+   auxiliary, `topoae_h0`: the topological term of Moor et al. (2020) in
+   dimension 0, distances at the MST edges each space selects, in both
+   directions, all 63 edges of the 64-text subsample, reference rescaled as
+   before, pairs from persist0. The two agree on the multiset of MST edge
+   lengths and differ only in whether the *same* pairs must die, so the
+   comparison isolates whether pairing information matters. Exp 4 is now
+   4 auxiliaries × 2 λ = 8 rows. RTD is not built (cross-filtration, H1, a
+   new dependency).
 6. **Layer 4 router.** Protocol: trained on SciCUEval, tested on SciCUEval
    held-out and on MMLU. MMLU carries none of SciCUEval's subject labels
    (the corpora share the `source_subset` / `source_domain` schema, not
