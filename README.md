@@ -28,7 +28,7 @@ each checkpoint is evaluated on SciCUEval (in-domain) and MMLU non-STEM
 1. **Layer 1** cosine geometry: within/between cosine, gap, LR accuracy.
 2. **Layer 2** the bakeoff's 25-seed UMAP → KeplerMapper → HDBSCAN bootstrap: ARI, NMI, coverage, node count.
 3. **Layer 3** linguistic anchors: weighted purity, anchor Spearman ρ (Mapper graph distance vs standardized textstat distance), per-feature alignment.
-4. **Layer 4** router (new): one logistic regression over the union of both corpora's subject labels, trained on a stratified 80% of both eval splits, scored on held-out SciCUEval rows (`router_acc_in`) and MMLU rows (`router_acc_mmlu`).
+4. **Layer 4** router (new): one logistic regression over the union of both corpora's domain labels (5 scientific + 5 general), trained on a stratified 80% of both eval splits, scored on held-out SciCUEval rows (`router_acc_in`) and MMLU rows (`router_acc_mmlu`), with the cross-corpus misroute fractions (`router_in_to_mmlu_frac`, `router_mmlu_to_in_frac`) beside them.
 
 A Mapper graph with coverage < 0.05 or fewer than 5 nodes is flagged
 `disintegrated`; its ARI and ρ are not to be read.
@@ -163,8 +163,13 @@ data/ checkpoints/ embeddings/   gitignored artifacts, each with a manifest.json
 - `ari_sd` did not exist in the first post; it is the standard deviation of
   the same 300 pairwise ARIs whose mean the post reported.
 - The two corpora share a label schema (`source_subset`, `source_domain`) but
-  no label values, which is why the router uses a union label space.
-  `eval.router.mode: per_corpus` and `label: domain` are the alternatives.
+  no label values at either level, so a SciCUEval-trained classifier has no
+  MMLU accuracy; the router is a union classifier instead, which matches the
+  first post's router (it classifies prompts by domain, and general-domain
+  prompts are traffic for a different model, not rejects). The experiment
+  grids route over `domain`; `base.yaml` keeps `subset` for `make
+  repro-check`. `eval.router.mode: per_corpus` is the alternative; it
+  duplicates Layer 1's `lr_acc`.
 - Cosine distance is bounded by 2 and standardized textstat distance is not,
   so the three distance-based auxiliaries rescale their fixed reference onto
   the live scale (`ref_scale: match_mean`; `none` is the literal comparison).

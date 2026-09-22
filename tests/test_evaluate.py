@@ -82,7 +82,7 @@ def test_router_union_and_per_corpus_on_separable_blobs():
     u = router_layer(Xa, la, Xb, lb, mode="union", holdout_frac=0.2, seed=42)
     assert u["router_n_classes"] == 6
     assert u["router_acc_in"] >= 0.9 and u["router_acc_mmlu"] >= 0.9
-    assert u["router_a_to_b_frac"] <= 0.1 and u["router_b_to_a_frac"] <= 0.1
+    assert u["router_in_to_mmlu_frac"] <= 0.1 and u["router_mmlu_to_in_frac"] <= 0.1
     p = router_layer(Xa, la, Xb, lb, mode="per_corpus", seed=42)
     assert p["router_acc_in"] >= 0.9 and p["router_acc_mmlu"] >= 0.9
     with pytest.raises(ValueError):

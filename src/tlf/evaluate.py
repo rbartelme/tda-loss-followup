@@ -645,7 +645,7 @@ def router_layer(
 
     Returns:
         ``router_acc_in, router_acc_mmlu, router_mode`` and, for ``union``,
-        ``router_a_to_b_frac, router_b_to_a_frac, router_n_classes``.
+        ``router_in_to_mmlu_frac, router_mmlu_to_in_frac, router_n_classes``.
 
     Raises:
         ValueError: On an unknown mode.
@@ -688,10 +688,10 @@ def router_layer(
         "router_acc_mmlu": acc_b,
         "router_mode": mode,
         "router_n_classes": len(names),
-        "router_a_to_b_frac": float(is_b_class[pred[te_a]].mean())
+        "router_in_to_mmlu_frac": float(is_b_class[pred[te_a]].mean())
         if te_a.any()
         else float("nan"),
-        "router_b_to_a_frac": float((~is_b_class[pred[te_b]]).mean())
+        "router_mmlu_to_in_frac": float((~is_b_class[pred[te_b]]).mean())
         if te_b.any()
         else float("nan"),
     }

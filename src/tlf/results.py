@@ -154,11 +154,17 @@ CSV_COLUMNS: tuple[str, ...] = (
     "disintegrated",
     "router_acc_in",
     "router_acc_mmlu",
+    "router_in_to_mmlu_frac",
+    "router_mmlu_to_in_frac",
+    "router_mode",
+    "router_label",
     "git_sha",
     "timestamp",
 )
 KEY_COLUMNS: tuple[str, ...] = CSV_COLUMNS[:10]
-METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[10:25]
+METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[10:29]
+# Metric columns that name a recipe rather than measure something.
+STRING_METRICS: tuple[str, ...] = ("lr_eval", "router_mode", "router_label")
 NUMERIC_COLUMNS: tuple[str, ...] = tuple(
     c
     for c in CSV_COLUMNS
@@ -171,6 +177,8 @@ NUMERIC_COLUMNS: tuple[str, ...] = tuple(
         "aux",
         "corpus",
         "lr_eval",
+        "router_mode",
+        "router_label",
         "disintegrated",
         "git_sha",
         "timestamp",
@@ -250,7 +258,7 @@ def make_row(
         seed: Training seed.
         corpus: Evaluation corpus.
         metrics: Dict from ``evaluate_checkpoint``; missing metrics become NaN
-            (``lr_eval``, the LR recipe name, becomes the empty string).
+            (the recipe names in ``STRING_METRICS`` become the empty string).
 
     Returns:
         A dict with exactly ``CSV_COLUMNS``.
@@ -269,7 +277,7 @@ def make_row(
         "corpus": corpus,
     }
     for c in METRIC_COLUMNS:
-        if c == "lr_eval":
+        if c in STRING_METRICS:
             row[c] = str(metrics.get(c, ""))
             continue
         v = metrics.get(c, nan)
@@ -354,9 +362,9 @@ def load_results(
 
     Returns:
         A frame with ``CSV_COLUMNS``: numeric columns as floats (``seed`` as
-        int), ``disintegrated`` as bool, ``aux`` empty string for none,
-        ``lr_eval`` empty for CSVs written before that column existed. Empty
-        when nothing is on disk.
+        int), ``disintegrated`` as bool, ``aux`` empty string for none, the
+        ``STRING_METRICS`` empty for CSVs written before those columns
+        existed. Empty when nothing is on disk.
     """
     results_dir = Path(results_dir)
     paths = (

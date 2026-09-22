@@ -10,3 +10,9 @@ eval:
   # Layer 1 LR accuracy: stratified 5-fold CV (protocol), not the bakeoff's
   # single 80/20 holdout. The CSV records which in `lr_eval`.
   lr_eval: cv
+  # Layer 4 router: route over the 10 domains (5 SciCUEval + 5 MMLU), the
+  # granularity of the router the first post was choosing an encoder for
+  # ("classifies prompts by domain and complexity"). base.yaml keeps
+  # `subset` (the data sources) so `make repro-check` is unchanged.
+  router:
+    label: domain

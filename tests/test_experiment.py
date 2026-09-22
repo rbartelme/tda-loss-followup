@@ -99,7 +99,8 @@ def test_base_aux_schedule_does_not_leak_into_the_grid():
 
 
 def test_experiment_grids_share_one_eval_section_with_cv_lr():
-    """exp1-4 share experiments.yaml (CV LR, one cache fingerprint); base.yaml stays holdout."""
+    """exp1-4 share experiments.yaml (CV LR, domain router, one fingerprint); base.yaml keeps the bakeoff recipe."""
+    base = load_config(CONFIGS / "base.yaml")
     fingerprints = set()
     for name in (
         "exp1_tau_sweep",
@@ -109,9 +110,11 @@ def test_experiment_grids_share_one_eval_section_with_cv_lr():
     ):
         cfg = load_config(CONFIGS / f"{name}.yaml")
         assert cfg["eval"]["lr_eval"] == "cv"
+        assert cfg["eval"]["router"] == {**base["eval"]["router"], "label": "domain"}
         fingerprints.add(eval_fingerprint(cfg))
     assert len(fingerprints) == 1
-    assert load_config(CONFIGS / "base.yaml")["eval"]["lr_eval"] == "holdout"
+    assert base["eval"]["lr_eval"] == "holdout"
+    assert base["eval"]["router"]["label"] == "subset"
 
 
 def test_model_and_tau_filters_intersect(tmp_path):

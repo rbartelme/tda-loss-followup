@@ -31,6 +31,10 @@ METRICS = {
     "disintegrated": False,
     "router_acc_in": 0.9,
     "router_acc_mmlu": 0.7,
+    "router_in_to_mmlu_frac": 0.0,
+    "router_mmlu_to_in_frac": 0.01,
+    "router_mode": "union",
+    "router_label": "domain",
 }
 
 
@@ -80,6 +84,10 @@ def test_csv_columns_are_exactly_the_brief_schema():
         "disintegrated",
         "router_acc_in",
         "router_acc_mmlu",
+        "router_in_to_mmlu_frac",
+        "router_mmlu_to_in_frac",
+        "router_mode",
+        "router_label",
         "git_sha",
         "timestamp",
     )
@@ -151,3 +159,5 @@ def test_lr_eval_column_is_a_string_and_tolerates_absence(tmp_path):
     append_row(_row(corpus="mmlu", metrics=without), tmp_path)
     df = load_results(tmp_path)
     assert list(df["lr_eval"]) == ["cv", ""]
+    assert list(df["router_label"]) == ["domain", "domain"]
+    assert df["router_mmlu_to_in_frac"].iloc[0] == 0.01

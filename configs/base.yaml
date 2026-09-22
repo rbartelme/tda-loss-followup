@@ -94,6 +94,7 @@ eval:
   #                     to the right source, in and out of domain?)
   #   mode: per_corpus  two independent LRs, one per corpus (bakeoff recipe)
   #   label: subset     10 classes per corpus (source_subset); 'domain' = 5 (source_domain)
+  #                     configs/experiments.yaml switches the experiment grids to 'domain'.
   router:
     mode: union
     label: subset

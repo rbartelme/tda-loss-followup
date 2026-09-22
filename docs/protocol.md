@@ -199,7 +199,7 @@ Differences between this protocol, the scaffold brief, and the code as built
    comparison isolates whether pairing information matters. Exp 4 is now
    4 auxiliaries × 2 λ = 8 rows. RTD is not built (cross-filtration, H1, a
    new dependency).
-6. **Layer 4 router.** Protocol: trained on SciCUEval, tested on SciCUEval
+6. ~~**Layer 4 router.** Protocol: trained on SciCUEval, tested on SciCUEval
    held-out and on MMLU. MMLU carries none of SciCUEval's subject labels
    (the corpora share the `source_subset` / `source_domain` schema, not
    values), so a SciCUEval-trained classifier has no MMLU accuracy. Built:
@@ -207,7 +207,22 @@ Differences between this protocol, the scaffold brief, and the code as built
    on a stratified 80% of both eval splits, accuracy reported separately on
    held-out SciCUEval and MMLU rows, plus cross-corpus misroute fractions.
    `per_corpus` and `label: domain` are the alternatives. The intended
-   mapping, if different, is still to be stated.
+   mapping, if different, is still to be stated.~~
+   **Resolved 2026-09-22.** No mapping exists: the domain vocabularies are
+   disjoint too (biology, biomedicine, chemistry, materials, physics vs.
+   business, common_knowledge, humanities, law_policy, social_science). The
+   router the first post was choosing an encoder for "classifies prompts by
+   domain and complexity", and general-domain prompts are traffic for a
+   different model, not rejects, so Layer 4 is the union router at *domain*
+   granularity: one LR over the 10 domains, trained on a stratified 80% of
+   both eval splits, scored on held-out SciCUEval (`router_acc_in`) and MMLU
+   (`router_acc_mmlu`) rows. MedCPT's MMLU disintegration should surface as
+   low `router_acc_mmlu`. The misroute fractions (`router_in_to_mmlu_frac`,
+   `router_mmlu_to_in_frac`) join the CSV as sanity columns (science vs.
+   general is trivially separable), and `router_mode` / `router_label`
+   record the recipe. `base.yaml` keeps `label: subset` for
+   `make repro-check`; `per_corpus` duplicates Layer 1 and is unused.
+   Complexity, the router's other axis, is what anchor ρ measures.
 7. **HF Hub push of trained checkpoints.** In the deliverables, not built.
    Needs a namespace and a choice of final-only versus all fractions.
 8. **Compute budget.** Protocol: ~40 min (SciCUEval) + ~25 min (MMLU) per
