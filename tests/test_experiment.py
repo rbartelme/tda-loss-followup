@@ -8,7 +8,14 @@ import pytest
 
 from tlf.config import load_config
 from tlf.evaluate import eval_fingerprint
-from tlf.experiment import Run, checkpoint_fracs, checkpoint_root, expand_grid, plan
+from tlf.experiment import (
+    Run,
+    checkpoint_fracs,
+    checkpoint_root,
+    expand_grid,
+    plan,
+    select_runs,
+)
 
 CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
@@ -105,3 +112,22 @@ def test_experiment_grids_share_one_eval_section_with_cv_lr():
         fingerprints.add(eval_fingerprint(cfg))
     assert len(fingerprints) == 1
     assert load_config(CONFIGS / "base.yaml")["eval"]["lr_eval"] == "holdout"
+
+
+def test_model_and_tau_filters_intersect(tmp_path):
+    """--model/--tau narrow the grid to matching runs, in grid order; no match is empty."""
+    cfg = load_config(CONFIGS / "exp1_tau_sweep.yaml")
+    cfg["paths"]["results"] = str(tmp_path / "results")
+    cfg["paths"]["checkpoints"] = str(tmp_path / "ckpt")
+    cfg["paths"]["pairs"] = str(tmp_path / "pairs")
+    runs = expand_grid(cfg)
+    assert [r.id for r in select_runs(runs, taus=[0.01, 0.2])] == [
+        "minilm_mnrl_tau0.01_random_s0",
+        "minilm_mnrl_tau0.2_random_s0",
+        "biomedbert-fulltext_mnrl_tau0.01_random_s0",
+        "biomedbert-fulltext_mnrl_tau0.2_random_s0",
+    ]
+    assert select_runs(runs) == runs and select_runs(runs, models=[], taus=[]) == runs
+    items = plan(cfg, models=["minilm"], taus=[0.05])
+    assert [it["run"].id for it in items] == ["minilm_mnrl_tau0.05_random_s0"]
+    assert plan(cfg, models=["bge-base"]) == []

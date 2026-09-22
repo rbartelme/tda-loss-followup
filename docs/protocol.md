@@ -172,9 +172,14 @@ Differences between this protocol, the scaffold brief, and the code as built
    run's `ckpt_0.0` is a relative symlink to it; the caches resolve the link,
    so the untrained model is evaluated once per base model while each run
    still writes its own init row.
-4. **Filling in intermediate checkpoints for the τ values that moved**
+4. ~~**Filling in intermediate checkpoints for the τ values that moved**
    (order of operations, step 3). Built: the driver fills in, but for every τ.
-   Proposed: `--tau` and `--model` filters on `scripts/run_experiment.py`.
+   Proposed: `--tau` and `--model` filters on `scripts/run_experiment.py`.~~
+   **Resolved 2026-09-22.** As proposed: repeatable `--model` and `--tau`
+   flags on the driver, intersected and applied after grid expansion; a
+   selection that matches nothing is an error naming the grid's values.
+   `make exp1 EXP_FLAGS="--tau 0.01 --tau 0.05"` passes them through, and
+   `--dry-run` shows the selected runs first.
 5. **Persistent-homology regularizer.** Protocol: TopoAE loss or RTD. Built:
    persist0 `TopoH0Loss`, which matches sorted H0 death vectors (MST edge
    lengths) between the cosine-distance matrix of the embedding subsample and

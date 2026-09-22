@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import shutil
 import time
 from collections.abc import Sequence
@@ -141,6 +142,33 @@ def expand_grid(cfg: dict[str, Any]) -> list[Run]:
     return runs
 
 
+def select_runs(
+    runs: Sequence[Run],
+    *,
+    models: Sequence[str] | None = None,
+    taus: Sequence[float] | None = None,
+) -> list[Run]:
+    """Narrow a grid to the runs matching every given filter.
+
+    Args:
+        runs: Output of ``expand_grid``.
+        models: Keep only these model keys; ``None`` or empty keeps all.
+        taus: Keep only these temperatures (``math.isclose``); ``None`` or
+            empty keeps all.
+
+    Returns:
+        The matching runs in their original order.
+    """
+    out = list(runs)
+    if models:
+        keep = set(models)
+        out = [r for r in out if r.model in keep]
+    if taus:
+        want = [float(t) for t in taus]
+        out = [r for r in out if any(math.isclose(r.tau, t) for t in want)]
+    return out
+
+
 def checkpoint_fracs(cfg: dict[str, Any], only_final: bool) -> list[float]:
     """Checkpoint fractions to evaluate.
 
@@ -212,6 +240,8 @@ def plan(
     force: bool = False,
     corpora: Sequence[str] | None = None,
     n_seeds: int | None = None,
+    models: Sequence[str] | None = None,
+    taus: Sequence[float] | None = None,
 ) -> list[dict[str, Any]]:
     """Describe what ``execute`` would do, without doing it.
 
@@ -222,6 +252,8 @@ def plan(
         corpora: Corpora to evaluate; defaults to ``cfg["corpora"]`` or both.
         n_seeds: Mapper bootstrap seeds override, as ``execute`` will pass it;
             decides which cached metrics count as hits.
+        models: Restrict to these model keys (see ``select_runs``).
+        taus: Restrict to these temperatures (see ``select_runs``).
 
     Returns:
         One dict per run: the run, whether it is trained, its pair path and
@@ -233,7 +265,7 @@ def plan(
     corp = list(corpora or cfg.get("corpora") or CORPORA)
     results_dir = cfg["paths"]["results"]
     out = []
-    for run in expand_grid(cfg):
+    for run in select_runs(expand_grid(cfg), models=models, taus=taus):
         root = checkpoint_root(run, cfg)
         pp = pair_path_for(run, cfg)
         todo = [
@@ -272,6 +304,8 @@ def execute(
     n_seeds: int | None = None,
     n_workers: int | None = None,
     corpora: Sequence[str] | None = None,
+    models: Sequence[str] | None = None,
+    taus: Sequence[float] | None = None,
 ) -> dict[str, Any]:
     """Run an experiment: train missing runs, evaluate missing rows, append.
 
@@ -282,6 +316,9 @@ def execute(
         n_seeds: Mapper bootstrap seeds override.
         n_workers: Mapper bootstrap workers override.
         corpora: Corpora to evaluate; defaults to the config's list or both.
+        models: Restrict to these model keys (see ``select_runs``); used to
+            fill in intermediate checkpoints for the runs that moved.
+        taus: Restrict to these temperatures (see ``select_runs``).
 
     Returns:
         Counts of runs trained / skipped and rows written / skipped, how many
@@ -302,7 +339,13 @@ def execute(
         "rows_skipped": 0,
     }
     for item in plan(
-        cfg, only_final=only_final, force=force, corpora=corpora, n_seeds=n_seeds
+        cfg,
+        only_final=only_final,
+        force=force,
+        corpora=corpora,
+        n_seeds=n_seeds,
+        models=models,
+        taus=taus,
     ):
         run: Run = item["run"]
         root: Path = item["root"]

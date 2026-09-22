@@ -82,8 +82,12 @@ experiment writes its own CSV row from the cached metrics. Likewise every
 run's `ckpt_0.0` is a symlink to `checkpoints/_untrained/<model>/`, the base
 model saved once, so the untrained row is evaluated once per base model rather
 than once per run. Pass `N_WORKERS=20`
-to any of them to size the Mapper bootstrap pool. `scripts/run_experiment.py
---dry-run` prints the plan, including how many rows will come from cache,
+to any of them to size the Mapper bootstrap pool. `EXP_FLAGS` passes anything
+else to the driver: after `exp1-final` has shown where anchor ρ moves,
+`make exp1 EXP_FLAGS="--tau 0.01 --tau 0.05"` fills in the intermediate
+checkpoints for just those temperatures (`--model` narrows likewise; both
+repeat and intersect). `scripts/run_experiment.py --dry-run` prints the plan,
+including which runs are selected and how many rows will come from cache,
 without running anything; `--force` redoes everything.
 
 ## Hardware
