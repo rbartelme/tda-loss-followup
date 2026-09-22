@@ -154,5 +154,9 @@ def test_checkpoint_steps_come_from_the_manifests(tmp_path):
     )
     assert checkpoint_steps_for(root, root / "ckpt_0.5") == (234.0, 468.0)
     assert checkpoint_steps_for(root, root / "ckpt_0.0") == (0.0, 468.0)
-    step, total = checkpoint_steps_for(root, root / "ckpt_1.0")
+    step, total = checkpoint_steps_for(root, root / "ckpt_1.0")  # not saved yet
+    assert math.isnan(step) and total == 468.0
+    step, total = checkpoint_steps_for(
+        tmp_path / "nope", tmp_path / "nope" / "ckpt_1.0"
+    )
     assert math.isnan(step) and math.isnan(total)
