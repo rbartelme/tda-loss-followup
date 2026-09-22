@@ -23,8 +23,15 @@ N_EVAL_PER_SUBSET = 10
 
 @pytest.fixture(scope="module")
 def synthetic() -> tuple[pd.DataFrame, np.ndarray]:
-    """200 rows, 4 subsets. Features are 8 tight clusters per subset so that
-    matched (<= 0.5 SD) and mismatched (>= 1.5 SD) partners both exist."""
+    """Build 200 rows in 4 subsets with clustered features.
+
+    Eight tight clusters per subset guarantee matched (<= 0.5 SD) and
+    mismatched (>= 1.5 SD) partners both exist. Eval rows get absurd feature
+    values so that any standardization leak would break the threshold tests.
+
+    Returns:
+        ``(frame, feature_matrix)`` aligned by row.
+    """
     rng = np.random.default_rng(123)
     rows, feats = [], []
     for s in range(N_SUBSETS):
@@ -51,6 +58,7 @@ def synthetic() -> tuple[pd.DataFrame, np.ndarray]:
 
 
 def _train_features(synthetic):
+    """Return the frame, its train split, and the train-row feature matrix."""
     df, X = synthetic
     train = train_split(df)
     Xt = X[np.flatnonzero((df["split"] == "train").to_numpy())]
@@ -58,6 +66,7 @@ def _train_features(synthetic):
 
 
 def _pair_dists(pairs: pd.DataFrame, train: pd.DataFrame, Xt: np.ndarray) -> np.ndarray:
+    """Recompute standardized textstat distances for pairs from train-only statistics."""
     mu, sd = fit_standardizer(Xt)
     Z = standardize(Xt, mu, sd)
     pos = {i: k for k, i in enumerate(train["id"])}
@@ -68,6 +77,7 @@ def _pair_dists(pairs: pd.DataFrame, train: pd.DataFrame, Xt: np.ndarray) -> np.
 
 @pytest.mark.parametrize("kind", ["random", "matched", "mismatched"])
 def test_no_eval_leakage(synthetic, kind):
+    """No anchor or positive id comes from the eval split."""
     df, train, Xt = _train_features(synthetic)
     eval_ids = set(eval_split(df)["id"])
     pairs = build_pairs(train, kind, 100, seed=0, feature_matrix=Xt, eval_ids=eval_ids)
@@ -76,12 +86,14 @@ def test_no_eval_leakage(synthetic, kind):
 
 
 def test_rejects_eval_rows_in_train_frame(synthetic):
+    """Passing a frame with eval rows is an error, not a silent leak."""
     df, _, _ = _train_features(synthetic)
     with pytest.raises(ValueError):
         build_pairs(df, "random", 10, seed=0, feature_matrix=np.zeros((len(df), 6)))
 
 
 def test_matched_within_half_sd(synthetic):
+    """Every matched pair is within 0.5 train-standardized SD, and ts_dist agrees."""
     df, train, Xt = _train_features(synthetic)
     pairs = build_pairs(train, "matched", 120, seed=0, feature_matrix=Xt)
     assert len(pairs) == 120
@@ -91,6 +103,7 @@ def test_matched_within_half_sd(synthetic):
 
 
 def test_mismatched_beyond_1p5_sd(synthetic):
+    """Every mismatched pair is at least 1.5 train-standardized SD apart."""
     df, train, Xt = _train_features(synthetic)
     pairs = build_pairs(train, "mismatched", 120, seed=0, feature_matrix=Xt)
     assert len(pairs) == 120
@@ -99,6 +112,7 @@ def test_mismatched_beyond_1p5_sd(synthetic):
 
 
 def test_random_pairs_are_within_subset(synthetic):
+    """Random pairs share a subset, report it correctly, and never self-pair."""
     df, train, Xt = _train_features(synthetic)
     pairs = build_pairs(train, "random", 150, seed=0, feature_matrix=Xt)
     subset_of = dict(zip(train["id"], train["subset"], strict=True))
@@ -115,6 +129,7 @@ def test_random_pairs_are_within_subset(synthetic):
 
 @pytest.mark.parametrize("kind", ["random", "matched", "mismatched"])
 def test_fixed_seed_is_reproducible(synthetic, kind):
+    """Same seed gives identical pairs; a different seed does not."""
     df, train, Xt = _train_features(synthetic)
     a = build_pairs(train, kind, 80, seed=7, feature_matrix=Xt)
     b = build_pairs(train, kind, 80, seed=7, feature_matrix=Xt)
@@ -124,6 +139,7 @@ def test_fixed_seed_is_reproducible(synthetic, kind):
 
 
 def test_anchors_without_replacement_until_exhausted(synthetic):
+    """Anchors are used once each before any reuse, and pairs are never duplicated."""
     df, train, Xt = _train_features(synthetic)
     n_train = len(train)  # 160
     pairs, rep = build_pairs_with_report(
@@ -141,6 +157,7 @@ def test_anchors_without_replacement_until_exhausted(synthetic):
 
 
 def test_quota_shortfall_is_filled_from_other_subsets(synthetic):
+    """A subset that cannot supply its quota is skipped and its share filled elsewhere."""
     df, train, Xt = _train_features(synthetic)
     Xt = Xt.copy()
     # Replace subset S0's clustered features with 40 distinct points at the same
@@ -163,6 +180,7 @@ def test_quota_shortfall_is_filled_from_other_subsets(synthetic):
 
 
 def test_bakeoff_eval_indices_matches_reference_algorithm():
+    """The sampler agrees with the bakeoff's load_corpus, inlined as a reference."""
     labels = ["b"] * 7 + ["a"] * 3 + ["c"] * 5
     idx = bakeoff_eval_indices(labels, sample_per_class=4, seed=42)
     # Reference: the bakeoff's load_corpus, inlined.
@@ -181,6 +199,7 @@ def test_bakeoff_eval_indices_matches_reference_algorithm():
 
 
 def test_textstat_vector_shape_and_order():
+    """The vector has six finite entries in FEATURE_NAMES order."""
     v = textstat_vector("The cat sat on the mat. It was happy.")
     assert v.shape == (len(FEATURE_NAMES),)
     assert FEATURE_NAMES[2] == "lexicon_count" and v[2] == 9

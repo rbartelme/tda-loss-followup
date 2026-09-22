@@ -1,6 +1,8 @@
 """Build one pair set from the SciCUEval train split.
 
-    uv run python scripts/build_pairs.py --config configs/base.yaml \\
+Usage::
+
+    uv run python scripts/build_pairs.py --config configs/base.yaml
         --kind {random,matched,mismatched} --n 20000 --seed 0
 
 Writes ``data/pairs/<kind>_s<seed>/pairs.parquet`` and a ``manifest.json``
@@ -31,6 +33,7 @@ from tlf.results import write_manifest
 
 
 def main() -> None:
+    """Parse arguments, build one pair set, and write it with its manifest."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", type=Path, required=True)
     ap.add_argument("--kind", choices=PAIR_KINDS, required=True)

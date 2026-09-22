@@ -35,7 +35,15 @@ MANIFEST_PACKAGES: tuple[str, ...] = (
 
 
 def git_sha(repo: Path = REPO_ROOT) -> str:
-    """HEAD sha of this repo, suffixed ``-dirty`` if the tree has changes."""
+    """Return the HEAD commit of a git repository.
+
+    Args:
+        repo: Repository root. Defaults to this repo.
+
+    Returns:
+        The 40-character sha, suffixed with ``-dirty`` when the working tree
+        has uncommitted changes, or ``"unknown"`` if git is unavailable.
+    """
     try:
         sha = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=repo, text=True, stderr=subprocess.DEVNULL
@@ -52,6 +60,15 @@ def git_sha(repo: Path = REPO_ROOT) -> str:
 
 
 def package_versions(names: tuple[str, ...] = MANIFEST_PACKAGES) -> dict[str, str]:
+    """Look up installed versions of the packages that affect results.
+
+    Args:
+        names: Distribution names to query.
+
+    Returns:
+        A mapping from name to version string, or ``"missing"`` when the
+        distribution is not installed.
+    """
     out: dict[str, str] = {}
     for n in names:
         try:
@@ -68,7 +85,18 @@ def write_manifest(
     seed: int,
     extra: dict[str, Any] | None = None,
 ) -> Path:
-    """Write ``out_dir/manifest.json`` with provenance for the artifact in ``out_dir``."""
+    """Write ``manifest.json`` describing the artifact stored in ``out_dir``.
+
+    Args:
+        out_dir: Directory holding the artifact. Created if needed.
+        config_path: The YAML config the artifact was produced from.
+        seed: The seed used.
+        extra: Additional keys merged into the manifest (artifact-specific
+            provenance such as source hashes or builder reports).
+
+    Returns:
+        The path of the manifest written.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {

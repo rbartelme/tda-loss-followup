@@ -28,11 +28,13 @@ DIAG = {"scicueval": SCRATCH / "diagnostic_subset", "mmlu": SCRATCH / "diagnosti
 
 @pytest.fixture(scope="module")
 def cfg():
+    """Load the repo's base config once per module."""
     return load_config(BASE)
 
 
 @pytest.mark.parametrize("corpus", ["scicueval", "mmlu"])
 def test_eval_split_matches_bakeoff_corpus_npz(cfg, corpus):
+    """The eval split is the exact prompt and label sequence the first post encoded."""
     npz = DIAG[corpus] / "corpus.npz"
     if not npz.is_file():
         pytest.skip(f"{npz} not present")
@@ -44,6 +46,7 @@ def test_eval_split_matches_bakeoff_corpus_npz(cfg, corpus):
 
 @pytest.mark.parametrize("corpus", ["scicueval", "mmlu"])
 def test_flatten_from_raw_matches_bakeoff_jsonl(cfg, corpus):
+    """Re-flattening the raw tree reproduces the bakeoff's JSONL record for record."""
     root = Path(cfg["paths"][f"{corpus}_root"])
     jsonl = Path(cfg["paths"][f"{corpus}_jsonl"])
     if not (root.is_dir() and jsonl.is_file()):
@@ -57,6 +60,7 @@ def test_flatten_from_raw_matches_bakeoff_jsonl(cfg, corpus):
 
 
 def test_split_sizes(cfg):
+    """SciCUEval splits 4000/7343 and MMLU samples 2450 rows, all eval."""
     if not Path(cfg["paths"]["scicueval_jsonl"]).is_file():
         pytest.skip("bakeoff JSONL not present")
     sci = load_corpus(cfg, "scicueval")

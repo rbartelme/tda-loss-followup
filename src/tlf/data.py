@@ -76,11 +76,34 @@ MMLU_SUBJECT_DOMAIN: dict[str, str] = {
 
 
 def _slugify_competency(name: str) -> str:
+    """Turn a SciCUEval competency filename stem into a record-id slug.
+
+    Args:
+        name: Competency name such as ``"Context-aware_Inference"``.
+
+    Returns:
+        Lower-cased name with ``_`` and ``--`` collapsed to ``-``.
+    """
     return name.lower().replace("_", "-").replace("--", "-")
 
 
 def flatten_scicueval(root: Path) -> list[dict[str, Any]]:
-    """Walk ``<root>/<Subset>/<Competency>.json`` into flat records."""
+    """Flatten the SciCUEval tree into one record per question.
+
+    Mirrors ``convert_root`` in the bakeoff's ``scicueval_to_jsonl.py``: subset
+    directories are visited in sorted order, the four competency files in a
+    fixed order, and questions that are empty or not strings are skipped.
+
+    Args:
+        root: The SciCUEval ``data/`` directory containing one folder per subset.
+
+    Returns:
+        Records with keys ``id, question, source_dataset, source_subset,
+        source_domain, source_competency`` in the bakeoff's row order.
+
+    Raises:
+        FileNotFoundError: If ``root`` is not a directory.
+    """
     root = Path(root)
     if not root.is_dir():
         raise FileNotFoundError(f"SciCUEval root does not exist: {root}")
@@ -114,7 +137,21 @@ def flatten_scicueval(root: Path) -> list[dict[str, Any]]:
 
 
 def flatten_mmlu(root: Path) -> list[dict[str, Any]]:
-    """Walk ``<root>/<subject>.json`` into flat records."""
+    """Flatten the per-subject MMLU JSON files into one record per question.
+
+    Mirrors ``convert_root`` in the bakeoff's ``mmlu_to_jsonl.py``: subject files
+    are visited in sorted order and empty questions are skipped.
+
+    Args:
+        root: Directory of ``<subject>.json`` files from the bakeoff's downloader.
+
+    Returns:
+        Records with the same keys as ``flatten_scicueval``;
+        ``source_competency`` is ``None``.
+
+    Raises:
+        FileNotFoundError: If ``root`` is not a directory.
+    """
     root = Path(root)
     if not root.is_dir():
         raise FileNotFoundError(f"MMLU root does not exist: {root}")
@@ -146,6 +183,14 @@ def flatten_mmlu(root: Path) -> list[dict[str, Any]]:
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read a JSONL file.
+
+    Args:
+        path: File to read.
+
+    Returns:
+        One dict per non-blank line, in file order.
+    """
     rows: list[dict[str, Any]] = []
     with Path(path).open("r", encoding="utf-8") as f:
         for line in f:
@@ -156,6 +201,12 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
+    """Write records as JSONL, creating parent directories.
+
+    Args:
+        path: Destination file.
+        records: Dicts to serialise, one per line, non-ASCII preserved.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -164,6 +215,14 @@ def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
 
 
 def sha256_file(path: Path) -> str:
+    """Hash a file's contents.
+
+    Args:
+        path: File to hash.
+
+    Returns:
+        Hex-encoded SHA-256 digest.
+    """
     h = hashlib.sha256()
     with Path(path).open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -174,11 +233,18 @@ def sha256_file(path: Path) -> str:
 def _source_records(
     cfg: dict[str, Any], corpus: str
 ) -> tuple[list[dict[str, Any]], Path]:
-    """Records for ``corpus`` plus the file they came from.
+    """Load the flat records for a corpus, preferring the bakeoff's JSONL.
 
-    Order of preference: the bakeoff JSONL named in the config, a previously
-    cached copy under ``data/raw``, and finally a fresh flatten of the raw
-    tree (which is then cached).
+    Order of preference: the bakeoff JSONL named in ``paths.<corpus>_jsonl``, a
+    previously cached copy under ``paths.data_raw``, and finally a fresh flatten
+    of ``paths.<corpus>_root`` which is then written to that cache.
+
+    Args:
+        cfg: Resolved config with a ``paths`` section.
+        corpus: ``"scicueval"`` or ``"mmlu"``.
+
+    Returns:
+        ``(records, path)`` where ``path`` is the file the records came from.
     """
     paths = cfg["paths"]
     jsonl = Path(paths[f"{corpus}_jsonl"])
@@ -202,13 +268,21 @@ def _source_records(
 def bakeoff_eval_indices(
     labels: Sequence[str], sample_per_class: int, seed: int
 ) -> np.ndarray:
-    """Row indices of the bakeoff's evaluation sample, in the bakeoff's order.
+    """Select the bakeoff's evaluation sample.
 
-    Mirrors ``load_corpus`` in the bakeoff's ``embedding_diagnostic.py``: rows
-    are grouped by label in file order, one ``default_rng(seed)`` is shared
-    across labels, labels are visited alphabetically, and a label with more
-    than ``sample_per_class`` rows contributes ``rng.choice(n, k, replace=False)``
-    in the order returned.
+    Mirrors ``load_corpus`` in the bakeoff's ``embedding_diagnostic.py``: rows are
+    grouped by label in file order, one ``default_rng(seed)`` is shared across
+    labels, labels are visited alphabetically, and a label with more than
+    ``sample_per_class`` rows contributes ``rng.choice(n, k, replace=False)`` in
+    the order returned.
+
+    Args:
+        labels: Label per row, in file order.
+        sample_per_class: Cap per label (400 in the bakeoff).
+        seed: RNG seed (42 in the bakeoff).
+
+    Returns:
+        Int64 row indices of the sample, in the bakeoff's row order.
     """
     by_label: dict[str, list[int]] = {}
     for i, lab in enumerate(labels):
@@ -227,6 +301,17 @@ def bakeoff_eval_indices(
 def _records_to_frame(
     records: list[dict[str, Any]], prompt_field: str, label_field: str
 ) -> pd.DataFrame:
+    """Build the corpus frame from flat records.
+
+    Args:
+        records: Output of a flattener or ``read_jsonl``.
+        prompt_field: Key holding the text (``"question"``).
+        label_field: Key holding the subset label (``"source_subset"``).
+
+    Returns:
+        A frame with columns ``id, text, subset, domain``. Rows whose prompt
+        is empty or not a string are dropped, as the bakeoff's loader does.
+    """
     ids, texts, subsets, domains = [], [], [], []
     for r in records:
         text = r.get(prompt_field)
@@ -242,6 +327,17 @@ def _records_to_frame(
 
 
 def _assign_splits(df: pd.DataFrame, sample_per_class: int, seed: int) -> pd.DataFrame:
+    """Mark the bakeoff eval sample and record its row order.
+
+    Args:
+        df: Frame from ``_records_to_frame``.
+        sample_per_class: Passed to ``bakeoff_eval_indices``.
+        seed: Passed to ``bakeoff_eval_indices``.
+
+    Returns:
+        A copy with ``split`` (``"eval"`` or ``"train"``) and ``eval_order``
+        (position within the eval sample, ``-1`` for train rows).
+    """
     idx = bakeoff_eval_indices(df["subset"].tolist(), sample_per_class, seed)
     split = np.full(len(df), "train", dtype=object)
     order = np.full(len(df), -1, dtype=np.int64)
@@ -254,7 +350,15 @@ def _assign_splits(df: pd.DataFrame, sample_per_class: int, seed: int) -> pd.Dat
 
 
 def load_scicueval(cfg: dict[str, Any]) -> pd.DataFrame:
-    """SciCUEval with the bakeoff's 400-per-subset ``eval`` sample; the rest is ``train``."""
+    """Load SciCUEval with the bakeoff's evaluation split marked.
+
+    Args:
+        cfg: Resolved config with ``paths`` and ``corpus`` sections.
+
+    Returns:
+        A frame with ``CORPUS_COLUMNS``. 400 rows per subset are ``eval`` (the
+        exact rows the first post encoded); the remaining 7,343 are ``train``.
+    """
     records, _ = _source_records(cfg, "scicueval")
     c = cfg["corpus"]
     df = _records_to_frame(records, c["prompt_field"], c["label_field"])
@@ -263,7 +367,15 @@ def load_scicueval(cfg: dict[str, Any]) -> pd.DataFrame:
 
 
 def load_mmlu(cfg: dict[str, Any]) -> pd.DataFrame:
-    """MMLU with the bakeoff's sampling. Every returned row is ``eval``."""
+    """Load MMLU with the bakeoff's sampling applied.
+
+    Args:
+        cfg: Resolved config with ``paths`` and ``corpus`` sections.
+
+    Returns:
+        A frame with ``CORPUS_COLUMNS`` containing only the sampled rows, in the
+        bakeoff's row order, every one marked ``eval``. MMLU is never trained on.
+    """
     records, _ = _source_records(cfg, "mmlu")
     c = cfg["corpus"]
     df = _records_to_frame(records, c["prompt_field"], c["label_field"])
@@ -273,6 +385,18 @@ def load_mmlu(cfg: dict[str, Any]) -> pd.DataFrame:
 
 
 def load_corpus(cfg: dict[str, Any], corpus: str) -> pd.DataFrame:
+    """Dispatch to the loader for a corpus name.
+
+    Args:
+        cfg: Resolved config.
+        corpus: ``"scicueval"`` or ``"mmlu"``.
+
+    Returns:
+        The corpus frame.
+
+    Raises:
+        ValueError: If ``corpus`` is not one of ``CORPORA``.
+    """
     if corpus == "scicueval":
         return load_scicueval(cfg)
     if corpus == "mmlu":
@@ -281,16 +405,39 @@ def load_corpus(cfg: dict[str, Any], corpus: str) -> pd.DataFrame:
 
 
 def corpus_source_path(cfg: dict[str, Any], corpus: str) -> Path:
-    """The JSONL ``load_corpus`` would read for ``corpus`` (for manifests)."""
+    """Return the JSONL that ``load_corpus`` reads for a corpus.
+
+    Args:
+        cfg: Resolved config.
+        corpus: ``"scicueval"`` or ``"mmlu"``.
+
+    Returns:
+        The source path, for recording in manifests.
+    """
     return _source_records(cfg, corpus)[1]
 
 
 def eval_split(df: pd.DataFrame) -> pd.DataFrame:
-    """Eval rows in the bakeoff's row order."""
+    """Select the eval rows of a corpus frame in the bakeoff's row order.
+
+    Args:
+        df: A corpus frame.
+
+    Returns:
+        Eval rows sorted by ``eval_order`` with a fresh index.
+    """
     return df[df["split"] == "eval"].sort_values("eval_order").reset_index(drop=True)
 
 
 def train_split(df: pd.DataFrame) -> pd.DataFrame:
+    """Select the train rows of a corpus frame.
+
+    Args:
+        df: A corpus frame.
+
+    Returns:
+        Train rows with a fresh index.
+    """
     return df[df["split"] == "train"].reset_index(drop=True)
 
 
@@ -300,9 +447,18 @@ def train_split(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def corpus_textstat(df: pd.DataFrame, cfg: dict[str, Any], corpus: str) -> np.ndarray:
-    """(N, 6) textstat matrix aligned to ``df`` rows, cached under ``data/raw``.
+    """Return the textstat matrix for a corpus frame, cached under ``data/raw``.
 
-    The cache is keyed on the id sequence, so a different frame recomputes.
+    The cache is keyed on the frame's id sequence, so a different frame (or a
+    different row order) recomputes rather than returning stale rows.
+
+    Args:
+        df: A corpus frame.
+        cfg: Resolved config with ``paths.data_raw``.
+        corpus: Name used in the cache filenames.
+
+    Returns:
+        A float64 array of shape ``(len(df), 6)`` aligned to ``df`` rows.
     """
     raw = Path(cfg["paths"]["data_raw"])
     npy = raw / f"{corpus}_textstat.npy"
@@ -333,7 +489,16 @@ PAIR_COLUMNS: tuple[str, ...] = ("anchor_id", "positive_id", "subset", "ts_dist"
 
 
 def _proportional_quotas(sizes: dict[str, int], total: int) -> dict[str, int]:
-    """Largest-remainder split of ``total`` in proportion to ``sizes``."""
+    """Split a total across groups in proportion to their sizes.
+
+    Args:
+        sizes: Group name to group size.
+        total: Number of items to allocate.
+
+    Returns:
+        Group name to integer quota, summing to ``total``, using the
+        largest-remainder method with ties broken by name.
+    """
     n = sum(sizes.values())
     if n == 0 or total <= 0:
         return {s: 0 for s in sizes}
@@ -356,20 +521,47 @@ def build_pairs_with_report(
     mismatched_min_sd: float = 1.5,
     eval_ids: Iterable[str] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Build ``n_pairs`` (anchor, positive) pairs from ``df_train``.
+    """Build (anchor, positive) pairs from the train split, with a builder report.
+
+    Pair kinds:
 
     * ``random``: positive drawn uniformly from the anchor's subset.
-    * ``matched``: same subset, standardized textstat distance ``<= matched_max_sd``.
-    * ``mismatched``: same subset, standardized textstat distance ``>= mismatched_min_sd``.
+    * ``matched``: same subset, standardized textstat distance
+      ``<= matched_max_sd``.
+    * ``mismatched``: same subset, standardized textstat distance
+      ``>= mismatched_min_sd``.
 
-    Textstat features are standardized on ``df_train`` only. Anchors are
-    sampled without replacement: pass 1 fills a per-subset quota proportional
-    to subset size; if a subset cannot supply its quota, the shortfall is
-    filled from anchors in other subsets that are still unused. Only once
-    every usable anchor has been used once are anchors reused (a second
-    round), and no (anchor, positive) pair is ever emitted twice. The report
-    records quotas, shortfalls, how many pairs were filled from other subsets,
-    and the maximum anchor reuse.
+    Textstat features are standardized on ``df_train`` only. Anchors are sampled
+    without replacement: pass 1 fills a per-subset quota proportional to subset
+    size; if a subset cannot supply its quota, the shortfall is filled from
+    anchors in other subsets that are still unused. Only once every usable
+    anchor has been used once are anchors reused, and no (anchor, positive)
+    pair is ever emitted twice.
+
+    Args:
+        df_train: Train rows of a corpus frame (``id, text, subset`` required;
+            ``split`` must be all ``"train"`` if present).
+        kind: One of ``PAIR_KINDS``.
+        n_pairs: Number of pairs requested.
+        seed: Seed for the single RNG that drives every draw.
+        feature_matrix: Precomputed ``(len(df_train), 6)`` textstat matrix.
+            Computed from ``df_train["text"]`` when omitted.
+        matched_max_sd: Threshold for ``matched``.
+        mismatched_min_sd: Threshold for ``mismatched``.
+        eval_ids: Ids that must not appear in any pair. Checked against
+            ``df_train`` as a leakage guard.
+
+    Returns:
+        ``(pairs, report)``. ``pairs`` has ``PAIR_COLUMNS`` in a shuffled order
+        and may be shorter than ``n_pairs`` if admissible pairs run out (a
+        warning is logged). ``report`` records quotas, per-subset counts and
+        shortfalls, how many pairs were filled outside the quotas, the maximum
+        anchor reuse, dead anchors, and the standardizer statistics.
+
+    Raises:
+        ValueError: If ``kind`` is unknown, ``n_pairs`` is not positive,
+            ``df_train`` contains non-train rows or eval ids, or
+            ``feature_matrix`` has the wrong shape.
     """
     if kind not in PAIR_KINDS:
         raise ValueError(f"kind must be one of {PAIR_KINDS}, got {kind!r}")
@@ -410,6 +602,15 @@ def build_pairs_with_report(
     dists: list[float] = []
 
     def draw(a: int) -> tuple[int, float] | None:
+        """Draw one admissible positive for an anchor.
+
+        Args:
+            a: Positional index of the anchor in ``df``.
+
+        Returns:
+            ``(positive_index, standardized_distance)`` or ``None`` when the anchor
+            has no admissible partner left, in which case it is marked dead.
+        """
         m = members[subsets[a]]
         d = np.linalg.norm(Z[m] - Z[a], axis=1)
         if kind == "matched":
@@ -430,6 +631,14 @@ def build_pairs_with_report(
         return int(cand[j]), float(d[ok][j])
 
     def take(a: int) -> bool:
+        """Draw for an anchor and record the pair if one was found.
+
+        Args:
+            a: Positional index of the anchor in ``df``.
+
+        Returns:
+            ``True`` if a pair was appended.
+        """
         r = draw(a)
         if r is None:
             return False
@@ -528,5 +737,16 @@ def build_pairs(
     seed: int,
     **kwargs: Any,
 ) -> pd.DataFrame:
-    """``build_pairs_with_report`` without the report. See that function."""
+    """Build (anchor, positive) pairs without the report.
+
+    Args:
+        df_train: See ``build_pairs_with_report``.
+        kind: See ``build_pairs_with_report``.
+        n_pairs: See ``build_pairs_with_report``.
+        seed: See ``build_pairs_with_report``.
+        **kwargs: Forwarded to ``build_pairs_with_report``.
+
+    Returns:
+        The pairs frame.
+    """
     return build_pairs_with_report(df_train, kind, n_pairs, seed, **kwargs)[0]

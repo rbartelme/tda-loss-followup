@@ -16,6 +16,16 @@ import yaml
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge ``override`` into a deep copy of ``base``.
+
+    Args:
+        base: Mapping providing the defaults.
+        override: Mapping whose values win. Nested mappings merge recursively;
+            any other value replaces the base value outright.
+
+    Returns:
+        A new dict. Neither input is modified.
+    """
     out = copy.deepcopy(base)
     for k, v in override.items():
         if isinstance(v, dict) and isinstance(out.get(k), dict):
@@ -26,6 +36,20 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _resolve_base(base: str, relative_to: Path) -> Path:
+    """Locate the file named by a ``base:`` entry.
+
+    Args:
+        base: Path string from the YAML, absolute or relative.
+        relative_to: The config file that named it.
+
+    Returns:
+        An existing path. A relative name is tried as given (relative to the
+        working directory), then under the config's directory and its parent,
+        first by the full relative path and then by bare filename.
+
+    Raises:
+        FileNotFoundError: If no candidate exists.
+    """
     p = Path(base)
     if p.is_absolute() or p.exists():
         return p
@@ -40,7 +64,19 @@ def _resolve_base(base: str, relative_to: Path) -> Path:
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
-    """Load ``path`` and merge it over its ``base:`` config, if any."""
+    """Load a YAML config, merging it over its ``base:`` config if it names one.
+
+    Args:
+        path: Path to the YAML file.
+
+    Returns:
+        The merged mapping with ``_config_path`` set to ``str(path)``. The
+        ``base`` key itself is removed.
+
+    Raises:
+        ValueError: If the top level of the file is not a mapping.
+        FileNotFoundError: If a ``base:`` config cannot be found.
+    """
     path = Path(path)
     with path.open() as f:
         cfg = yaml.safe_load(f) or {}
