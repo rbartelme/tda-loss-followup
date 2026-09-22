@@ -68,7 +68,8 @@ make exp1-final    # Exp 1, evaluating only ckpt_0.0 and ckpt_1.0
 | `eval-smoke` | `python -m tlf.evaluate --smoke` |
 | `repro-check` | evaluates the two untrained starting encoders and prints them beside `configs/reference.yaml` |
 | `exp1-final` | Exp 1 with `--only-final` |
-| `exp1` `exp2` `exp3` `exp4` | the full sweeps, all five checkpoints |
+| `exp1` | the temperature sweep, all five checkpoints |
+| `exp2` `exp3` `exp4` | the loss-family, data and auxiliary grids at init and final only, as the protocol asks; run `scripts/run_experiment.py` without `--only-final` for all five |
 | `figures` | the four figures from `results/*.csv` into `figures/` |
 | `test` / `lint` | `pytest -q` / `ruff check .` |
 
@@ -77,7 +78,10 @@ relaunched. Checkpoints and their evaluations are keyed by run, not by
 experiment: a run that several grids contain (Exp 1's `biomedbert-fulltext`
 τ 0.05 random run is also Exp 2's MNRL run, Exp 3's random run and Exp 4's
 no-aux baseline) trains once and runs its Mapper bootstrap once, and each
-experiment writes its own CSV row from the cached metrics. Pass `N_WORKERS=20`
+experiment writes its own CSV row from the cached metrics. Likewise every
+run's `ckpt_0.0` is a symlink to `checkpoints/_untrained/<model>/`, the base
+model saved once, so the untrained row is evaluated once per base model rather
+than once per run. Pass `N_WORKERS=20`
 to any of them to size the Mapper bootstrap pool. `scripts/run_experiment.py
 --dry-run` prints the plan, including how many rows will come from cache,
 without running anything; `--force` redoes everything.

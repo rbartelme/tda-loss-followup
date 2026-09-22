@@ -2,7 +2,10 @@
 
 One ``run_finetune`` call trains one encoder with one loss on one pair set and
 writes ``out_dir/ckpt_<frac>/`` sentence-transformers checkpoints (each with a
-``manifest.json``) plus ``out_dir/train_log.csv``.
+``manifest.json``) plus ``out_dir/train_log.csv``. ``ckpt_0.0`` is a relative
+symlink to ``checkpoints/_untrained/<model>/``, the base model saved once and
+shared by every run of it, so the evaluation caches (which resolve the link)
+evaluate the untrained model once per base model rather than once per run.
 
 Loss paths:
 
@@ -25,6 +28,7 @@ import argparse
 import csv
 import json
 import logging
+import os
 import random
 import shutil
 import time
@@ -250,6 +254,82 @@ def build_sentence_transformer(
     )
     pooling = st_modules.Pooling(dim, pooling_mode="mean")
     return SentenceTransformer(modules=[transformer, pooling], device=str(device))
+
+
+def untrained_dir(model_key: str, cfg: dict[str, Any]) -> Path:
+    """Shared step-zero checkpoint directory for a base model.
+
+    Args:
+        model_key: Key in ``models.yaml``.
+        cfg: Resolved config (``paths.checkpoints``).
+
+    Returns:
+        ``paths.checkpoints/_untrained/<model_key>/``.
+    """
+    return Path(cfg["paths"]["checkpoints"]) / "_untrained" / model_key
+
+
+def ensure_untrained_checkpoint(model_key: str, cfg: dict[str, Any]) -> Path:
+    """Save the base model once as a mean-pooled ST checkpoint shared by all runs.
+
+    Every run of ``model_key`` starts from the same weights, so each run's
+    ``ckpt_0.0`` is a symlink to this directory. Written from the roster's
+    ``hf_id`` through ``build_sentence_transformer``, independently of the
+    run's loss path, so the bytes on disk do not depend on which run came
+    first. Rewritten only if missing, incomplete, or saved from another
+    ``hf_id``.
+
+    Args:
+        model_key: Key in ``models.yaml``.
+        cfg: Resolved config (``train.max_length``, ``paths``, ``seed``).
+
+    Returns:
+        The shared directory.
+
+    Raises:
+        ValueError: On an unknown model key.
+    """
+    roster = load_model_roster(cfg)
+    if model_key not in roster:
+        raise ValueError(f"unknown model key {model_key!r}; have {sorted(roster)}")
+    hf_id = str(roster[model_key]["hf_id"])
+    d = untrained_dir(model_key, cfg)
+    manifest = d / "manifest.json"
+    if manifest.is_file():
+        try:
+            if json.loads(manifest.read_text()).get("hf_id") == hf_id:
+                return d
+        except (OSError, ValueError):
+            pass
+    if d.exists():
+        shutil.rmtree(d)
+    model = build_sentence_transformer(
+        hf_id, int(cfg["train"]["max_length"]), torch.device("cpu")
+    )
+    model.save(str(d), create_model_card=False)
+    write_manifest(
+        d,
+        config_path=cfg["_config_path"],
+        seed=int(cfg["seed"]),
+        extra={
+            "artifact": "checkpoint",
+            "shared": True,
+            "model_key": model_key,
+            "hf_id": hf_id,
+            "ckpt_frac": 0.0,
+            "step": 0,
+        },
+    )
+    log.info("saved shared untrained checkpoint %s", d)
+    return d
+
+
+def _remove_checkpoint(d: Path) -> None:
+    """Delete a checkpoint directory, or just the link when it is a symlink."""
+    if d.is_symlink():
+        d.unlink()
+    elif d.exists():
+        shutil.rmtree(d)
 
 
 def make_optimizer(
@@ -583,8 +663,15 @@ def _train_loop(
             if s != step:
                 continue
             d = out_dir / f"ckpt_{frac_tag(frac)}"
-            if d.exists():
-                shutil.rmtree(d)
+            _remove_checkpoint(d)
+            if frac == 0.0:
+                target = ensure_untrained_checkpoint(spec.model_key, cfg)
+                d.symlink_to(
+                    os.path.relpath(target, d.parent), target_is_directory=True
+                )
+                saved[frac_tag(frac)] = str(d)
+                log.info("linked %s to shared %s", d.name, target)
+                continue
             save_fn(d)
             write_manifest(
                 d,

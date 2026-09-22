@@ -158,10 +158,20 @@ Differences between this protocol, the scaffold brief, and the code as built
    The CSV gains an `lr_eval` column (`cv` or `holdout`) so `lr_acc` values
    are never compared across kinds by accident; `load_results` fills it empty
    for CSVs written before the column existed.
-3. **Checkpoints evaluated per experiment.** Protocol: init and final for
+3. ~~**Checkpoints evaluated per experiment.** Protocol: init and final for
    Exps 2 and 3, final only for Exp 4. Built: the `exp2`–`exp4` Make targets
    evaluate all five fractions. Proposed: `--only-final` on those targets;
-   the untrained row is shared and cached.
+   the untrained row is shared and cached.~~
+   **Resolved 2026-09-22.** `--only-final` on the `exp2`–`exp4` targets; Exp 4
+   keeps the init row, which is free and is the Pareto plot's baseline. The
+   untrained row was *not* shared as built: every run saved its own
+   `ckpt_0.0`, and the caches key on checkpoint path and manifest stamp, so
+   the 19 distinct runs meant 19 Mapper bootstraps of two distinct models.
+   Now the base model is saved once under `checkpoints/_untrained/<model>/`
+   (from the roster's `hf_id`, independent of the run's loss path) and every
+   run's `ckpt_0.0` is a relative symlink to it; the caches resolve the link,
+   so the untrained model is evaluated once per base model while each run
+   still writes its own init row.
 4. **Filling in intermediate checkpoints for the τ values that moved**
    (order of operations, step 3). Built: the driver fills in, but for every τ.
    Proposed: `--tau` and `--model` filters on `scripts/run_experiment.py`.

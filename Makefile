@@ -33,13 +33,13 @@ exp1:
 	$(UV) python scripts/run_experiment.py --config configs/exp1_tau_sweep.yaml --resume $(WORKERS_FLAG)
 
 exp2:
-	$(UV) python scripts/run_experiment.py --config configs/exp2_loss_family.yaml --resume $(WORKERS_FLAG)
+	$(UV) python scripts/run_experiment.py --config configs/exp2_loss_family.yaml --only-final --resume $(WORKERS_FLAG)
 
 exp3:
-	$(UV) python scripts/run_experiment.py --config configs/exp3_data_vs_loss.yaml --resume $(WORKERS_FLAG)
+	$(UV) python scripts/run_experiment.py --config configs/exp3_data_vs_loss.yaml --only-final --resume $(WORKERS_FLAG)
 
 exp4:
-	$(UV) python scripts/run_experiment.py --config configs/exp4_topo_aux.yaml --resume $(WORKERS_FLAG)
+	$(UV) python scripts/run_experiment.py --config configs/exp4_topo_aux.yaml --only-final --resume $(WORKERS_FLAG)
 
 figures:
 	$(UV) python scripts/make_figures.py --results results --reference configs/reference.yaml --out figures
