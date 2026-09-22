@@ -9,7 +9,9 @@ Usage::
 Expands the config grid, trains runs whose checkpoints are missing, evaluates
 every (checkpoint, corpus) whose result row is missing, and appends rows to
 ``results/<exp>.csv``. Finished work is skipped by default, so ``--resume`` is
-accepted for readability and changes nothing; ``--force`` redoes everything.
+accepted for readability and changes nothing. Checkpoints and cached metrics
+are keyed by run, not by experiment, so a run shared between grids is trained
+and evaluated once; ``--force`` retrains and re-evaluates, ignoring both caches.
 ``--only-final`` evaluates only ``ckpt_0.0`` and ``ckpt_1.0``.
 """
 

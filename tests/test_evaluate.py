@@ -12,9 +12,11 @@ from tlf.config import load_config
 from tlf.evaluate import (
     CORE_KEYS,
     RandomProjectionEncoder,
+    cached_metrics,
     evaluate_checkpoint,
     layer1,
     layers_2_3,
+    metrics_cache_path,
     router_layer,
     stratified_head,
 )
@@ -154,3 +156,29 @@ def test_evaluate_checkpoint_smoke_end_to_end(tmp_path):
     # The router is a checkpoint-level quantity: identical on both corpus rows.
     assert res["scicueval"]["router_acc_in"] == res["mmlu"]["router_acc_in"]
     assert res["scicueval"]["router_acc_mmlu"] == res["mmlu"]["router_acc_mmlu"]
+
+    # A second evaluation is answered from the metrics cache without recomputing.
+    path = metrics_cache_path(ckpt, "mmlu", cfg)
+    before = path.stat().st_mtime_ns
+    kw = dict(seeds=2, n_workers=1, encoder=enc, n_texts=50)
+    again = evaluate_checkpoint(ckpt, "mmlu", cfg, **kw)
+    assert again["eval_seconds"] == res["mmlu"]["eval_seconds"]
+    assert path.stat().st_mtime_ns == before
+    # The cache is keyed on what was asked for: seed count and eval settings.
+    name = getattr(enc, "name", repr(enc))
+    hit = cached_metrics(ckpt, "mmlu", cfg, n_seeds=2, n_texts=50, encoder_name=name)
+    assert hit is not None and hit["gap"] == res["mmlu"]["gap"]
+    assert (
+        cached_metrics(ckpt, "mmlu", cfg, n_seeds=3, n_texts=50, encoder_name=name)
+        is None
+    )
+    mode = cfg["eval"]["router"]["mode"]
+    cfg["eval"]["router"]["mode"] = "per_corpus"
+    assert (
+        cached_metrics(ckpt, "mmlu", cfg, n_seeds=2, n_texts=50, encoder_name=name)
+        is None
+    )
+    cfg["eval"]["router"]["mode"] = mode
+    # --force bypasses the cache and rewrites the file.
+    evaluate_checkpoint(ckpt, "mmlu", cfg, use_cache=False, **kw)
+    assert path.stat().st_mtime_ns != before

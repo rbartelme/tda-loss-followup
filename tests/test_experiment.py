@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tlf.config import load_config
-from tlf.experiment import Run, checkpoint_fracs, expand_grid, plan
+from tlf.experiment import Run, checkpoint_fracs, checkpoint_root, expand_grid, plan
 
 CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
@@ -48,6 +48,18 @@ def test_run_id_and_key_shape():
     assert r2.id == "biomedbert-fulltext_mnrl_tau0.05_random_persist0_h0_lam1_s0"
 
 
+def test_checkpoint_root_is_shared_across_experiments(tmp_path):
+    """The same run in two grids has one directory, named without the experiment."""
+    cfg = load_config(CONFIGS / "exp1_tau_sweep.yaml")
+    cfg["paths"]["checkpoints"] = str(tmp_path / "ckpt")
+    args = ("biomedbert-fulltext", "mnrl", 0.05, "random", None, 0.0, 0)
+    a = Run("exp1_tau_sweep", *args)
+    b = Run("exp3_data_vs_loss", *args)
+    assert (
+        checkpoint_root(a, cfg) == checkpoint_root(b, cfg) == tmp_path / "ckpt" / a.id
+    )
+
+
 def test_checkpoint_fracs_only_final():
     """--only-final keeps 0.0 and 1.0."""
     cfg = load_config(CONFIGS / "exp1_tau_sweep.yaml")
@@ -67,6 +79,7 @@ def test_plan_reports_everything_todo_on_a_fresh_tree(tmp_path):
         not it["trained"] and not it["pairs_exist"] and len(it["todo"]) == 4
         for it in items
     )
+    assert all(it["cached"] == [] for it in items)
 
 
 def test_base_aux_schedule_does_not_leak_into_the_grid():

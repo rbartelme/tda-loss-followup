@@ -73,9 +73,14 @@ make exp1-final    # Exp 1, evaluating only ckpt_0.0 and ckpt_1.0
 | `test` / `lint` | `pytest -q` / `ruff check .` |
 
 All experiment targets skip finished work, so an interrupted sweep is simply
-relaunched. Pass `N_WORKERS=20` to any of them to size the Mapper bootstrap
-pool. `scripts/run_experiment.py --dry-run` prints the plan without running
-anything; `--force` redoes everything.
+relaunched. Checkpoints and their evaluations are keyed by run, not by
+experiment: a run that several grids contain (Exp 1's `biomedbert-fulltext`
+τ 0.05 random run is also Exp 2's MNRL run, Exp 3's random run and Exp 4's
+no-aux baseline) trains once and runs its Mapper bootstrap once, and each
+experiment writes its own CSV row from the cached metrics. Pass `N_WORKERS=20`
+to any of them to size the Mapper bootstrap pool. `scripts/run_experiment.py
+--dry-run` prints the plan, including how many rows will come from cache,
+without running anything; `--force` redoes everything.
 
 ## Hardware
 
@@ -127,7 +132,7 @@ src/tlf/
   features.py     the six textstat features, verbatim from the bakeoff
   train.py        fine-tune driver: MNRL (cached), triplet, CoSENT, MLM; checkpoints; aux hook
   losses.py       textstat head, distance preservation, persist0 H0 (from PyPI persist0-tda)
-  evaluate.py     layers 1–4 per checkpoint, embedding cache, --smoke
+  evaluate.py     layers 1–4 per checkpoint, embedding + metrics caches, --smoke
   experiment.py   config grid → runs → train → evaluate → rows
   results.py      CSV schema, idempotent append, manifests
   plots.py        the four figures

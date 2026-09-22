@@ -128,13 +128,23 @@ mean node count < 5 as "disintegrated" and exclude its ARI from rankings.
 Differences between this protocol, the scaffold brief, and the code as built
 (commit `c26cb26`). Each is a decision, not a bug; the code runs either way.
 
-1. **Exp 3 pair sets.** Protocol: matched and mismatched. Built: matched,
+1. ~~**Exp 3 pair sets.** Protocol: matched and mismatched. Built: matched,
    mismatched and random (from the brief). The random run is identical to
    Exp 1's `biomedbert-fulltext` τ 0.05 run, Exp 2's MNRL run and Exp 4's
    no-aux baseline, and the driver keys checkpoints by experiment, so it
    would be trained four times. Proposed: key checkpoint directories by run
    id alone so identical runs train once and each experiment writes its rows
-   from cached embeddings; random then stays in Exp 3 for the figure at no cost.
+   from cached embeddings; random then stays in Exp 3 for the figure at no cost.~~
+   **Resolved 2026-09-22.** Random stays in Exp 3; the shared run trains once
+   and is Mapper-evaluated once. Checkpoint directories are keyed by run id
+   alone (`checkpoints/<run>/`), so later experiments find the run trained.
+   Each evaluation's metrics are cached beside its embeddings
+   (`embeddings/<run>/ckpt_<frac>/<corpus>.metrics.json`) under a key
+   covering the checkpoint, the eval rows, the encoder, the seed count, the
+   router flag and a hash of the result-determining `eval` settings; a later
+   experiment reads them back and writes its own CSV row. `--force` ignores
+   both caches. The cache only hits if the four experiment configs share one
+   `eval` section, which constrains items 2 and 6.
 2. **Layer 1 LR.** Protocol: 5-fold CV. Built: the bakeoff's single 80/20
    holdout by default, `eval.lr_eval: cv` opt-in. Proposed: `cv` in the four
    experiment configs, holdout kept in `base.yaml` so `make repro-check`

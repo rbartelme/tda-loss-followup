@@ -9,7 +9,12 @@ of both corpora (see ``router_layer``).
 
 Embeddings are cached under ``embeddings/<run>/<corpus>.npy`` with a
 provenance file, keyed on the checkpoint, the corpus id sequence and the
-encoder, so re-evaluating a checkpoint never re-encodes.
+encoder, so re-evaluating a checkpoint never re-encodes. The finished
+metrics are cached beside them in ``<corpus>.metrics.json`` under a
+``cache_key`` that adds the seed count, the router flag and a hash of the
+result-determining ``eval`` settings. Checkpoint directories are keyed by run,
+not by experiment, so a run that several experiment grids share runs its
+Mapper bootstrap once and each grid writes its own CSV row from the cache.
 
 ``python -m tlf.evaluate --smoke`` runs the whole pipeline on 50 texts per
 corpus with 3 seeds and a random-projection stand-in for the encoder.
@@ -65,6 +70,18 @@ Encoder = Callable[[list[str]], np.ndarray]
 # ---------------------------------------------------------------------------
 
 
+def default_encoder_name(cfg: dict[str, Any]) -> str:
+    """Cache-key name of the standard checkpoint encoder.
+
+    Args:
+        cfg: Resolved config (``eval.max_length``).
+
+    Returns:
+        The ``name`` a ``CheckpointEncoder`` built from ``cfg`` carries.
+    """
+    return f"bakeoff.encode_all(max_length={int(cfg['eval']['max_length'])})"
+
+
 class CheckpointEncoder:
     """The bakeoff's ``encode_all`` pointed at a checkpoint directory.
 
@@ -81,7 +98,7 @@ class CheckpointEncoder:
         self.max_length = int(ev["max_length"])
         self.batch_size = int(ev["batch_size"])
         self.device = bd.resolve_device(str(ev.get("device", "auto")))
-        self.name = f"bakeoff.encode_all(max_length={self.max_length})"
+        self.name = default_encoder_name(cfg)
 
     def __call__(self, texts: list[str]) -> np.ndarray:
         """Encode texts to float32 mean-pooled embeddings.
@@ -159,7 +176,7 @@ def run_name_for(ckpt_dir: Path | str, cfg: dict[str, Any]) -> str:
 
     Returns:
         The checkpoint's path relative to ``paths.checkpoints`` when it lives
-        there (``exp1/<run>/ckpt_0.5``), else ``<parent>/<name>``.
+        there (``<run>/ckpt_0.5``), else ``<parent>/<name>``.
     """
     ck = Path(ckpt_dir).resolve()
     root = Path(cfg["paths"]["checkpoints"]).resolve()
@@ -205,6 +222,130 @@ def checkpoint_stamp(ckpt_dir: Path | str) -> str:
         if f.is_file():
             return f"mtime:{f.stat().st_mtime_ns}"
     return "none"
+
+
+# ``eval`` keys that set how fast an evaluation runs, not what it returns.
+# ``n_seeds`` is keyed on its own because the driver can override it per call.
+_EVAL_SPEED_KEYS = frozenset({"device", "batch_size", "n_workers", "n_seeds"})
+
+
+def eval_fingerprint(cfg: dict[str, Any]) -> str:
+    """Hash of the ``eval`` settings that determine an evaluation's numbers.
+
+    Args:
+        cfg: Resolved config.
+
+    Returns:
+        Hex SHA-256 of the ``eval`` section minus ``device``, ``batch_size``,
+        ``n_workers`` and ``n_seeds``, serialised with sorted keys.
+    """
+    ev = {k: v for k, v in cfg["eval"].items() if k not in _EVAL_SPEED_KEYS}
+    blob = json.dumps(ev, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def metrics_cache_key(
+    ckpt_dir: Path | str,
+    corpus: str,
+    ev: pd.DataFrame,
+    cfg: dict[str, Any],
+    *,
+    encoder_name: str,
+    n_seeds: int,
+    with_router: bool,
+) -> dict[str, Any]:
+    """Everything a cached metrics file must match to be reused.
+
+    Args:
+        ckpt_dir: Checkpoint directory.
+        corpus: Corpus name.
+        ev: The eval rows the metrics are computed on, in order.
+        cfg: Resolved config.
+        encoder_name: The encoder's ``name``.
+        n_seeds: Mapper bootstrap seed count.
+        with_router: Whether Layer 4 is included.
+
+    Returns:
+        A JSON-safe dict: checkpoint stamp, corpus, row count and id hash,
+        encoder name, seed count, router flag and ``eval_fingerprint``.
+    """
+    ids = ev["id"].astype(str).tolist()
+    return {
+        "ckpt_stamp": checkpoint_stamp(ckpt_dir),
+        "corpus": corpus,
+        "n": len(ids),
+        "ids_sha256": hashlib.sha256("\n".join(ids).encode()).hexdigest(),
+        "encoder": encoder_name,
+        "n_seeds": int(n_seeds),
+        "with_router": bool(with_router),
+        "eval_fingerprint": eval_fingerprint(cfg),
+    }
+
+
+def metrics_cache_path(ckpt_dir: Path | str, corpus: str, cfg: dict[str, Any]) -> Path:
+    """Where ``evaluate_checkpoint`` writes a checkpoint's metrics for one corpus.
+
+    Args:
+        ckpt_dir: Checkpoint directory.
+        corpus: Corpus name.
+        cfg: Resolved config (``paths.embeddings``).
+
+    Returns:
+        ``embeddings_dir(ckpt_dir) / <corpus>.metrics.json``.
+    """
+    return embeddings_dir(ckpt_dir, cfg) / f"{corpus}.metrics.json"
+
+
+def _read_metrics_cache(path: Path, key: dict[str, Any]) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        m = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return m if isinstance(m, dict) and m.get("cache_key") == key else None
+
+
+def cached_metrics(
+    ckpt_dir: Path | str,
+    corpus: str,
+    cfg: dict[str, Any],
+    *,
+    n_seeds: int | None = None,
+    n_texts: int | None = None,
+    with_router: bool = True,
+    encoder_name: str | None = None,
+) -> dict[str, Any] | None:
+    """Load a checkpoint's cached metrics for one corpus, if they still apply.
+
+    Args:
+        ckpt_dir: Checkpoint directory.
+        corpus: Corpus name.
+        cfg: Resolved config.
+        n_seeds: Seed count the metrics must have used; defaults to ``eval.n_seeds``.
+        n_texts: Eval-split subsample the metrics must have used (smoke runs).
+        with_router: Whether the metrics must include Layer 4.
+        encoder_name: Encoder ``name`` the metrics must have used; defaults
+            to the standard checkpoint encoder's.
+
+    Returns:
+        The dict ``evaluate_checkpoint`` wrote, or ``None`` when there is no
+        file or its ``cache_key`` differs.
+    """
+    path = metrics_cache_path(ckpt_dir, corpus, cfg)
+    if not path.is_file():
+        return None
+    _, ev = _eval_rows(cfg, corpus, n_texts)
+    key = metrics_cache_key(
+        ckpt_dir,
+        corpus,
+        ev,
+        cfg,
+        encoder_name=encoder_name or default_encoder_name(cfg),
+        n_seeds=int(cfg["eval"]["n_seeds"] if n_seeds is None else n_seeds),
+        with_router=with_router,
+    )
+    return _read_metrics_cache(path, key)
 
 
 def stratified_head(ev: pd.DataFrame, n_texts: int) -> pd.DataFrame:
@@ -623,6 +764,7 @@ def evaluate_checkpoint(
     encoder: Any | None = None,
     n_texts: int | None = None,
     with_router: bool = True,
+    use_cache: bool = True,
 ) -> dict[str, Any]:
     """Run layers 1-4 for one checkpoint on one corpus.
 
@@ -636,19 +778,43 @@ def evaluate_checkpoint(
             ``encode_all`` on the checkpoint.
         n_texts: Subsample the eval split (smoke runs).
         with_router: Also compute Layer 4 (encodes the other corpus too).
+        use_cache: Return the metrics cached in ``<corpus>.metrics.json``
+            when its ``cache_key`` matches this call (see ``cached_metrics``);
+            ``False`` recomputes and overwrites the file.
 
     Returns:
         One flat dict with the ``CORE_KEYS`` and every supporting statistic,
-        also written to ``embeddings/<run>/<corpus>.metrics.json``.
+        also written to ``embeddings/<run>/<corpus>.metrics.json`` with the
+        ``cache_key`` it was computed under.
     """
     t0 = time.time()
     ev_cfg = cfg["eval"]
     n_seeds = int(ev_cfg["n_seeds"] if seeds is None else seeds)
     workers = int(ev_cfg["n_workers"] if n_workers is None else n_workers)
     seed = int(ev_cfg["seed"])
-    encoder = encoder or CheckpointEncoder(ckpt_dir, cfg)
+    enc_name = (
+        default_encoder_name(cfg)
+        if encoder is None
+        else getattr(encoder, "name", repr(encoder))
+    )
 
     df, ev = _eval_rows(cfg, corpus, n_texts)
+    key = metrics_cache_key(
+        ckpt_dir,
+        corpus,
+        ev,
+        cfg,
+        encoder_name=enc_name,
+        n_seeds=n_seeds,
+        with_router=with_router,
+    )
+    cache_path = metrics_cache_path(ckpt_dir, corpus, cfg)
+    if use_cache:
+        hit = _read_metrics_cache(cache_path, key)
+        if hit is not None:
+            log.info("[%s] metrics cache hit: %s", corpus, cache_path)
+            return hit
+    encoder = encoder or CheckpointEncoder(ckpt_dir, cfg)
     X = cached_embeddings(ckpt_dir, corpus, ev, cfg, encoder, seed)
     T_all = corpus_textstat(df, cfg, corpus)
     pos = {i: k for k, i in enumerate(df["id"].astype(str))}
@@ -693,12 +859,10 @@ def evaluate_checkpoint(
         log.info("[%s] layer 4 router", corpus)
         out.update(evaluate_router(ckpt_dir, cfg, encoder=encoder, n_texts=n_texts))
     out["eval_seconds"] = round(time.time() - t0, 1)
+    out["cache_key"] = key
 
-    d = embeddings_dir(ckpt_dir, cfg)
-    d.mkdir(parents=True, exist_ok=True)
-    (d / f"{corpus}.metrics.json").write_text(
-        json.dumps(out, indent=2, default=float) + "\n"
-    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(out, indent=2, default=float) + "\n")
     log.info(
         "[%s] gap=%.4f lr=%.3f ari=%.3f cov=%.3f nodes=%.1f rho=%.3f disint=%s router=(%.3f, %.3f) %.0fs",
         corpus,

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from tlf.data import CORPORA
-from tlf.evaluate import evaluate_checkpoint
+from tlf.evaluate import cached_metrics, evaluate_checkpoint
 from tlf.results import append_row, make_row, row_exists
 from tlf.train import frac_tag, run_finetune
 
@@ -172,8 +172,14 @@ def pair_path_for(run: Run, cfg: dict[str, Any]) -> Path:
 
 
 def checkpoint_root(run: Run, cfg: dict[str, Any]) -> Path:
-    """Run directory under ``paths.checkpoints/<exp>/``."""
-    return Path(cfg["paths"]["checkpoints"]) / run.exp / run.id
+    """Run directory ``paths.checkpoints/<run.id>/``.
+
+    Keyed by the run alone, not the experiment, so a run that several
+    experiment grids contain trains once, and each grid reads the same
+    checkpoints and, through the embeddings and metrics caches, the same
+    evaluation.
+    """
+    return Path(cfg["paths"]["checkpoints"]) / run.id
 
 
 def run_is_trained(root: Path, fracs: Sequence[float]) -> bool:
@@ -205,18 +211,23 @@ def plan(
     only_final: bool = False,
     force: bool = False,
     corpora: Sequence[str] | None = None,
+    n_seeds: int | None = None,
 ) -> list[dict[str, Any]]:
     """Describe what ``execute`` would do, without doing it.
 
     Args:
         cfg: Resolved experiment config.
         only_final: Evaluate only ``ckpt_0.0`` and ``ckpt_1.0``.
-        force: Treat everything as missing.
+        force: Treat everything as missing, cached metrics included.
         corpora: Corpora to evaluate; defaults to ``cfg["corpora"]`` or both.
+        n_seeds: Mapper bootstrap seeds override, as ``execute`` will pass it;
+            decides which cached metrics count as hits.
 
     Returns:
         One dict per run: the run, whether it is trained, its pair path and
-        whether that exists, and the (frac, corpus) pairs still to evaluate.
+        whether that exists, the (frac, corpus) pairs still to write
+        (``todo``) and the subset of those whose metrics are already cached
+        (``cached``).
     """
     fracs = checkpoint_fracs(cfg, only_final)
     corp = list(corpora or cfg.get("corpora") or CORPORA)
@@ -231,14 +242,23 @@ def plan(
             for c in corp
             if force or not row_exists(run.key(f, c), results_dir)
         ]
+        trained = (not force) and run_is_trained(root, fracs)
+        cached = [
+            (f, c)
+            for f, c in todo
+            if trained
+            and cached_metrics(root / f"ckpt_{frac_tag(f)}", c, cfg, n_seeds=n_seeds)
+            is not None
+        ]
         out.append(
             {
                 "run": run,
                 "root": root,
-                "trained": (not force) and run_is_trained(root, fracs),
+                "trained": trained,
                 "pair_path": pp,
                 "pairs_exist": pp.is_file(),
                 "todo": todo,
+                "cached": cached,
             }
         )
     return out
@@ -258,13 +278,14 @@ def execute(
     Args:
         cfg: Resolved experiment config.
         only_final: Evaluate only ``ckpt_0.0`` and ``ckpt_1.0``.
-        force: Retrain and re-evaluate everything.
+        force: Retrain and re-evaluate everything, ignoring cached metrics.
         n_seeds: Mapper bootstrap seeds override.
         n_workers: Mapper bootstrap workers override.
         corpora: Corpora to evaluate; defaults to the config's list or both.
 
     Returns:
-        Counts of runs trained / skipped and rows written / skipped, plus wall time.
+        Counts of runs trained / skipped and rows written / skipped, how many
+        of the written rows came from cached metrics, plus wall time.
 
     Raises:
         FileNotFoundError: If a run's pair set has not been built.
@@ -277,9 +298,12 @@ def execute(
         "trained": 0,
         "runs_skipped": 0,
         "rows_written": 0,
+        "rows_cached": 0,
         "rows_skipped": 0,
     }
-    for item in plan(cfg, only_final=only_final, force=force, corpora=corpora):
+    for item in plan(
+        cfg, only_final=only_final, force=force, corpora=corpora, n_seeds=n_seeds
+    ):
         run: Run = item["run"]
         root: Path = item["root"]
         stats["runs"] += 1
@@ -313,14 +337,21 @@ def execute(
             stats["trained"] += 1
         else:
             log.info(
-                "[%s] checkpoints present; evaluating %d rows",
+                "[%s] checkpoints present; evaluating %d rows (%d from cached metrics)",
                 run.id,
                 len(item["todo"]),
+                len(item["cached"]),
             )
+        cached = set(item["cached"])
         for frac, corpus in item["todo"]:
             ckpt = root / f"ckpt_{frac_tag(frac)}"
             metrics = evaluate_checkpoint(
-                ckpt, corpus, cfg, seeds=n_seeds, n_workers=n_workers
+                ckpt,
+                corpus,
+                cfg,
+                seeds=n_seeds,
+                n_workers=n_workers,
+                use_cache=not force,
             )
             append_row(
                 make_row(
@@ -339,6 +370,7 @@ def execute(
                 results_dir,
             )
             stats["rows_written"] += 1
+            stats["rows_cached"] += (frac, corpus) in cached
     stats["wall_seconds"] = round(time.time() - t0, 1)
     return stats
 
@@ -352,15 +384,18 @@ def describe_plan(items: list[dict[str, Any]]) -> str:
     Returns:
         Multi-line string.
     """
-    lines = [f"{'run':<64} {'trained':>7} {'pairs':>5} {'todo':>4}"]
+    lines = [f"{'run':<64} {'trained':>7} {'pairs':>5} {'todo':>4} {'cached':>6}"]
     for it in items:
         lines.append(
-            f"{it['run'].id:<64} {str(it['trained']):>7} {str(it['pairs_exist']):>5} {len(it['todo']):>4}"
+            f"{it['run'].id:<64} {str(it['trained']):>7} {str(it['pairs_exist']):>5} "
+            f"{len(it['todo']):>4} {len(it['cached']):>6}"
         )
     n_todo = sum(len(it["todo"]) for it in items)
+    n_cached = sum(len(it["cached"]) for it in items)
     n_train = sum(1 for it in items if it["todo"] and not it["trained"])
     lines.append(
-        f"{len(items)} runs; {n_train} to train; {n_todo} result rows to evaluate"
+        f"{len(items)} runs; {n_train} to train; {n_todo} result rows to write, "
+        f"{n_cached} of them from cached metrics"
     )
     return "\n".join(lines)
 
