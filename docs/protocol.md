@@ -1,5 +1,8 @@
 # Loss Functions vs. Topology: Experiment Protocol
 
+**Status: work in progress.** The protocol below is as written; the discrepancies
+between it and the scaffold as built are listed under *To be resolved* at the end.
+
 Follow-up to *Beyond MTEB: A Topology-Aware Embedder Bake-Off*. The first post argued
 that training regime, not architecture, determines whether an encoder's output manifold
 tracks linguistic surface features. This experiment tests that causally: same base model,
@@ -119,3 +122,58 @@ mean node count < 5 as "disintegrated" and exclude its ARI from rankings.
 - Figures: ρ-vs-step curves; gap-vs-ρ scatter; Exp 3 bar chart against MedCPT;
   Exp 4 Pareto plot of gap vs. ρ with router accuracy as marker size.
 - Trained checkpoints pushed to HF Hub for reproducibility.
+
+## To be resolved
+
+Differences between this protocol, the scaffold brief, and the code as built
+(commit `c26cb26`). Each is a decision, not a bug; the code runs either way.
+
+1. **Exp 3 pair sets.** Protocol: matched and mismatched. Built: matched,
+   mismatched and random (from the brief). The random run is identical to
+   Exp 1's `biomedbert-fulltext` τ 0.05 run, Exp 2's MNRL run and Exp 4's
+   no-aux baseline, and the driver keys checkpoints by experiment, so it
+   would be trained four times. Proposed: key checkpoint directories by run
+   id alone so identical runs train once and each experiment writes its rows
+   from cached embeddings; random then stays in Exp 3 for the figure at no cost.
+2. **Layer 1 LR.** Protocol: 5-fold CV. Built: the bakeoff's single 80/20
+   holdout by default, `eval.lr_eval: cv` opt-in. Proposed: `cv` in the four
+   experiment configs, holdout kept in `base.yaml` so `make repro-check`
+   compares like with like against the first post. CSV `lr_acc` then differs
+   in kind from `reference.yaml`'s; no figure depends on that comparison.
+3. **Checkpoints evaluated per experiment.** Protocol: init and final for
+   Exps 2 and 3, final only for Exp 4. Built: the `exp2`–`exp4` Make targets
+   evaluate all five fractions. Proposed: `--only-final` on those targets;
+   the untrained row is shared and cached.
+4. **Filling in intermediate checkpoints for the τ values that moved**
+   (order of operations, step 3). Built: the driver fills in, but for every τ.
+   Proposed: `--tau` and `--model` filters on `scripts/run_experiment.py`.
+5. **Persistent-homology regularizer.** Protocol: TopoAE loss or RTD. Built:
+   persist0 `TopoH0Loss`, which matches sorted H0 death vectors (MST edge
+   lengths) between the cosine-distance matrix of the embedding subsample and
+   the Euclidean textstat-distance matrix, with the reference rescaled onto
+   the live scale (`ref_scale: match_mean`). This is the TopoAE family;
+   TopoAE proper evaluates distances at the pairings selected in each space
+   rather than comparing sorted death vectors. persist0 returns the pairing
+   indices, so the exact TopoAE form is a small addition if wanted as a
+   fourth auxiliary. RTD is not built.
+6. **Layer 4 router.** Protocol: trained on SciCUEval, tested on SciCUEval
+   held-out and on MMLU. MMLU carries none of SciCUEval's subject labels
+   (the corpora share the `source_subset` / `source_domain` schema, not
+   values), so a SciCUEval-trained classifier has no MMLU accuracy. Built:
+   `eval.router.mode: union`, one LR over the union of both corpora's labels
+   on a stratified 80% of both eval splits, accuracy reported separately on
+   held-out SciCUEval and MMLU rows, plus cross-corpus misroute fractions.
+   `per_corpus` and `label: domain` are the alternatives. The intended
+   mapping, if different, is still to be stated.
+7. **HF Hub push of trained checkpoints.** In the deliverables, not built.
+   Needs a namespace and a choice of final-only versus all fractions.
+8. **Compute budget.** Protocol: ~40 min (SciCUEval) + ~25 min (MMLU) per
+   row. The bakeoff README's own figure (~100 min for 28 encoder-corpus
+   evaluations at 8 workers) implies about 3.5 min each. A 10× gap;
+   `make repro-check` measures it on the current machine before Spark time
+   is booked.
+9. **Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
+   of training, which is how checkpoints are defined; both models take the
+   same number of steps on the same pair set, so a step axis is a relabel.
+10. **`bge-base`** is in the roster as optional and in `models.yaml`; it is
+    not in any experiment grid yet.
