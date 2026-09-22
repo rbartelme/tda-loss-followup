@@ -69,6 +69,8 @@ def test_csv_columns_are_exactly_the_brief_schema():
         "ckpt_frac",
         "seed",
         "corpus",
+        "step",
+        "total_steps",
         "within_cos",
         "between_cos",
         "gap",
@@ -161,3 +163,14 @@ def test_lr_eval_column_is_a_string_and_tolerates_absence(tmp_path):
     assert list(df["lr_eval"]) == ["cv", ""]
     assert list(df["router_label"]) == ["domain", "domain"]
     assert df["router_mmlu_to_in_frac"].iloc[0] == 0.01
+
+
+def test_step_columns_default_nan_and_load_numeric(tmp_path):
+    """step/total_steps are NaN unless given, and load back as floats."""
+    r = _row()
+    assert r["step"] != r["step"] and r["total_steps"] != r["total_steps"]  # NaN
+    append_row(_row(step=47, total_steps=468, ckpt_frac=0.1), tmp_path)
+    df = load_results(tmp_path)
+    assert (
+        float(df["step"].iloc[0]) == 47.0 and float(df["total_steps"].iloc[0]) == 468.0
+    )

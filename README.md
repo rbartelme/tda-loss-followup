@@ -10,7 +10,8 @@ auxiliaries, and scores every checkpoint with the first post's three-layer
 harness (copied verbatim from
 [tda-embedder-bakeoff](https://github.com/rbartelme/tda-embedder-bakeoff))
 plus a new router layer. One CSV row per (model, loss, τ, pair set, aux, λ,
-checkpoint, corpus); the post is written from those CSVs.
+checkpoint, corpus), each carrying the checkpoint's optimizer step and the
+run's total; the post is written from those CSVs.
 
 ## The four experiments
 

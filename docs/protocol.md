@@ -248,8 +248,17 @@ Differences between this protocol, the scaffold brief, and the code as built
    story, since the eval code is the bakeoff's verbatim). The laptop
    (16 cores, 54 GB, RTX 4070 8 GB) stays for training and smoke runs. The
    compute section is rewritten from the measured number afterwards.
-9. **Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
+9. ~~**Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
    of training, which is how checkpoints are defined; both models take the
-   same number of steps on the same pair set, so a step axis is a relabel.
+   same number of steps on the same pair set, so a step axis is a relabel.~~
+   **Resolved 2026-09-22.** Fraction stays the axis, since that is how the
+   checkpoints are defined, and the absolute scale travels with it: every
+   CSV row now records the checkpoint's optimizer `step` and the run's
+   `total_steps` (from the checkpoint and run manifests), and the figure's
+   axis label reads "fraction of training · N steps" when every row on the
+   panel agrees on N (468 for a 20k-pair set at batch 128 over 3 epochs),
+   falling back to the plain label otherwise. The continued-MLM control in
+   Exp 2 batches unique texts rather than pairs, so its schedule differs;
+   the columns make that visible without a trip to the manifests.
 10. **`bge-base`** is in the roster as optional and in `models.yaml`; it is
     not in any experiment grid yet.

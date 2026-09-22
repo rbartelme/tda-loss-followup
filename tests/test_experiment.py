@@ -12,6 +12,7 @@ from tlf.experiment import (
     Run,
     checkpoint_fracs,
     checkpoint_root,
+    checkpoint_steps_for,
     expand_grid,
     plan,
     select_runs,
@@ -134,3 +135,24 @@ def test_model_and_tau_filters_intersect(tmp_path):
     items = plan(cfg, models=["minilm"], taus=[0.05])
     assert [it["run"].id for it in items] == ["minilm_mnrl_tau0.05_random_s0"]
     assert plan(cfg, models=["bge-base"]) == []
+
+
+def test_checkpoint_steps_come_from_the_manifests(tmp_path):
+    """Step from the checkpoint manifest; total from it, else the run manifest; else NaN."""
+    import json
+    import math
+
+    root = tmp_path / "run"
+    (root / "ckpt_0.5").mkdir(parents=True)
+    (root / "ckpt_0.0").mkdir()
+    (root / "manifest.json").write_text(json.dumps({"total_steps": 468}))
+    (root / "ckpt_0.5" / "manifest.json").write_text(
+        json.dumps({"step": 234, "total_steps": 468})
+    )
+    (root / "ckpt_0.0" / "manifest.json").write_text(
+        json.dumps({"step": 0, "shared": True})
+    )
+    assert checkpoint_steps_for(root, root / "ckpt_0.5") == (234.0, 468.0)
+    assert checkpoint_steps_for(root, root / "ckpt_0.0") == (0.0, 468.0)
+    step, total = checkpoint_steps_for(root, root / "ckpt_1.0")
+    assert math.isnan(step) and math.isnan(total)

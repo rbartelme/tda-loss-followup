@@ -139,6 +139,8 @@ CSV_COLUMNS: tuple[str, ...] = (
     "ckpt_frac",
     "seed",
     "corpus",
+    "step",
+    "total_steps",
     "within_cos",
     "between_cos",
     "gap",
@@ -162,7 +164,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "timestamp",
 )
 KEY_COLUMNS: tuple[str, ...] = CSV_COLUMNS[:10]
-METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[10:29]
+METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[12:31]
 # Metric columns that name a recipe rather than measure something.
 STRING_METRICS: tuple[str, ...] = ("lr_eval", "router_mode", "router_label")
 NUMERIC_COLUMNS: tuple[str, ...] = tuple(
@@ -243,6 +245,8 @@ def make_row(
     seed: int,
     corpus: str,
     metrics: dict[str, Any],
+    step: float | None = None,
+    total_steps: float | None = None,
 ) -> dict[str, Any]:
     """Assemble a CSV row from a run's identity and ``evaluate_checkpoint`` output.
 
@@ -259,6 +263,8 @@ def make_row(
         corpus: Evaluation corpus.
         metrics: Dict from ``evaluate_checkpoint``; missing metrics become NaN
             (the recipe names in ``STRING_METRICS`` become the empty string).
+        step: Optimizer step the checkpoint was saved at; NaN when unknown.
+        total_steps: The run's total optimizer steps; NaN when unknown.
 
     Returns:
         A dict with exactly ``CSV_COLUMNS``.
@@ -275,6 +281,8 @@ def make_row(
         "ckpt_frac": float(ckpt_frac),
         "seed": int(seed),
         "corpus": corpus,
+        "step": nan if step is None else float(step),
+        "total_steps": nan if total_steps is None else float(total_steps),
     }
     for c in METRIC_COLUMNS:
         if c in STRING_METRICS:

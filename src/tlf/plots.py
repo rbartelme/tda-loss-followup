@@ -426,6 +426,23 @@ def _final(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+def _fraction_label(sub: pd.DataFrame) -> str:
+    """X label for a fraction axis, carrying the step count when the panel agrees on one.
+
+    Args:
+        sub: The rows drawn on the panel.
+
+    Returns:
+        ``"fraction of training · N steps"`` when every finite ``total_steps``
+        is the same ``N``, else ``"fraction of training"``.
+    """
+    if "total_steps" in sub.columns:
+        totals = {int(t) for t in _finite(sub["total_steps"])}
+        if len(totals) == 1:
+            return f"fraction of training · {totals.pop()} steps"
+    return "fraction of training"
+
+
 def fig_rho_vs_step(
     df: pd.DataFrame, reference: dict[str, Any], out: Path
 ) -> Path | None:
@@ -514,7 +531,7 @@ def fig_rho_vs_step(
             _range_frame(ax, x=fracs, y=y_span, xticks=fracs)
             ax.set_xticklabels([f"{f:g}" for f in fracs])
             if i == len(corpora) - 1:
-                ax.set_xlabel("fraction of training", fontsize=8)
+                ax.set_xlabel(_fraction_label(sub), fontsize=8)
             if j == 0:
                 ax.set_ylabel("anchor ρ", fontsize=8)
             panels.append((ax, ends))

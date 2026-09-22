@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from tlf.plots import make_all
+from tlf.plots import _fraction_label, make_all
 from tlf.results import append_row, make_row
 
 REF = Path(__file__).resolve().parents[1] / "configs" / "reference.yaml"
@@ -53,6 +54,8 @@ def _synthetic_results(root: Path) -> None:
                             metrics=_metrics(
                                 rng, frac, disint=(corpus == "mmlu" and tau == 0.01)
                             ),
+                            step=round(frac * 468),
+                            total_steps=468,
                         ),
                         root,
                     )
@@ -130,3 +133,12 @@ def test_make_all_with_no_results_writes_nothing(tmp_path):
     """An empty results directory produces no figures and no error."""
     (tmp_path / "results").mkdir()
     assert make_all(tmp_path / "results", REF, tmp_path / "figures") == []
+
+
+def test_fraction_label_carries_the_step_count_only_when_the_panel_agrees():
+    """One shared total_steps puts the count in the label; mixed or missing does not."""
+    same = pd.DataFrame({"total_steps": [468.0, 468.0, float("nan")]})
+    assert _fraction_label(same) == "fraction of training · 468 steps"
+    mixed = pd.DataFrame({"total_steps": [468.0, 300.0]})
+    assert _fraction_label(mixed) == "fraction of training"
+    assert _fraction_label(pd.DataFrame({"ckpt_frac": [0.0]})) == "fraction of training"

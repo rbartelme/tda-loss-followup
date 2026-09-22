@@ -210,6 +210,32 @@ def checkpoint_root(run: Run, cfg: dict[str, Any]) -> Path:
     return Path(cfg["paths"]["checkpoints"]) / run.id
 
 
+def checkpoint_steps_for(root: Path, ckpt: Path) -> tuple[float, float]:
+    """A checkpoint's optimizer step and its run's total, from the manifests.
+
+    Args:
+        root: Run directory; its ``manifest.json`` carries ``total_steps``.
+        ckpt: Checkpoint directory; its ``manifest.json`` carries ``step`` and,
+            except for the shared untrained checkpoint, ``total_steps``.
+
+    Returns:
+        ``(step, total_steps)``, NaN where a manifest or field is missing.
+    """
+
+    def field(path: Path, key: str) -> float:
+        try:
+            v = json.loads(path.read_text()).get(key)
+        except (OSError, ValueError):
+            return float("nan")
+        return float("nan") if v is None else float(v)
+
+    step = field(ckpt / "manifest.json", "step")
+    total = field(ckpt / "manifest.json", "total_steps")
+    if math.isnan(total):
+        total = field(root / "manifest.json", "total_steps")
+    return step, total
+
+
 def run_is_trained(root: Path, fracs: Sequence[float]) -> bool:
     """Whether a run finished training and has every requested checkpoint.
 
@@ -396,6 +422,7 @@ def execute(
                 n_workers=n_workers,
                 use_cache=not force,
             )
+            step, total_steps = checkpoint_steps_for(root, ckpt)
             append_row(
                 make_row(
                     exp=run.exp,
@@ -409,6 +436,8 @@ def execute(
                     seed=run.seed,
                     corpus=corpus,
                     metrics=metrics,
+                    step=step,
+                    total_steps=total_steps,
                 ),
                 results_dir,
             )
