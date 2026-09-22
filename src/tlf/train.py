@@ -222,7 +222,7 @@ def build_sentence_transformer(
         A two-module ``SentenceTransformer`` (Transformer, Pooling).
     """
     transformer = st_modules.Transformer(hf_id, max_seq_length=max_length)
-    get_dim = getattr(transformer, "get_word_embedding_dimension", None)
+    get_dim = getattr(transformer, "get_embedding_dimension", None)
     dim = (
         int(get_dim())
         if callable(get_dim)
@@ -664,8 +664,8 @@ def _train_loop(
 def _embed(
     model: SentenceTransformer, texts: Sequence[str], device: torch.device
 ) -> Tensor:
-    """Tokenize and embed texts with gradient."""
-    features = batch_to_device(model.tokenize(list(texts)), device)
+    """Preprocess (tokenize) and embed texts with gradient."""
+    features = batch_to_device(model.preprocess(list(texts)), device)
     return model(features)["sentence_embedding"]
 
 
@@ -684,8 +684,8 @@ def _pair_step_cached(
         loss_obj.step = step
         loss_obj.texts = a_texts + p_texts
         with _autocast(device, bf16):
-            fa = batch_to_device(model.tokenize(a_texts), device)
-            fp = batch_to_device(model.tokenize(p_texts), device)
+            fa = batch_to_device(model.preprocess(a_texts), device)
+            fp = batch_to_device(model.preprocess(p_texts), device)
             loss = loss_obj([fa, fp], labels=None)
             loss.backward()
         return {"loss": float(loss), **loss_obj.last}
@@ -954,7 +954,7 @@ def run_finetune(
 
     model = build_sentence_transformer(hf_id, max_length, device)
     model.train()
-    embed_dim = int(model.get_sentence_embedding_dimension() or 0)
+    embed_dim = int(model.get_embedding_dimension() or 0)
 
     aux_cfg = cfg.get("aux", {})
     hook = AuxHook(
