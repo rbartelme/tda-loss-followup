@@ -1,0 +1,25 @@
+# First-post numbers for reference encoders, read from tda-embedder-bakeoff
+# (commit 4625b22) scratch/diagnostic_*/<key>/metrics.json (Layer 1) and
+# scratch/tda_*/comparison.csv (Layers 2-3, 25 seeds, base seed 42). No router
+# layer existed in the first post, so router_* are absent here.
+#
+# medcpt-query is the Exp 3 comparison row (a contrastive biomedical encoder
+# trained on real click-log pairs). The other three are the untrained starting
+# points of this repo's fine-tunes: ckpt_0.0 of each must reproduce these rows
+# within bootstrap noise before any fine-tune result is trusted.
+medcpt-query:
+  hf_id: ncbi/MedCPT-Query-Encoder
+  scicueval: {within_cos: 0.7856106162071228, between_cos: 0.7345432639122009, gap: 0.051067352294921875, lr_acc: 0.95125, ari: 0.8638905426995099, nmi: 0.9669169423356117, coverage: 0.39737, nodes: 173.16, purity: 0.9565836298932384, anchor_rho: 0.5316390632612213, disintegrated: false}
+  mmlu:      {within_cos: 0.7699783444404602, between_cos: 0.7397815585136414, gap: 0.030196785926818848, lr_acc: 0.7693877551020408, ari: 0.9615384615384616, nmi: 0.9615384615384616, coverage: 0.005551020408163266, nodes: 1.84, purity: 0.8043478260869565, anchor_rho: 0.0, disintegrated: true}
+biomedbert-fulltext:
+  hf_id: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
+  scicueval: {within_cos: 0.9785376787185669, between_cos: 0.9711320400238037, gap: 0.007405638694763184, lr_acc: 0.96875, ari: 0.8175820863808968, nmi: 0.9618708213384449, coverage: 0.5356099999999999, nodes: 204.0, purity: 0.9412546517809676, anchor_rho: 0.24920437390160027, disintegrated: false}
+  mmlu:      {within_cos: 0.9718511700630188, between_cos: 0.9656615257263184, gap: 0.0061896443367004395, lr_acc: 0.8244897959183674, ari: 0.6946535508174023, nmi: 0.8947357407135581, coverage: 0.15888979591836738, nodes: 37.48, purity: 0.8080808080808081, anchor_rho: 0.4762616625505408, disintegrated: false}
+minilm:
+  hf_id: sentence-transformers/all-MiniLM-L6-v2
+  scicueval: {within_cos: 0.3771897852420807, between_cos: 0.16743026673793793, gap: 0.20975951850414276, lr_acc: 0.96375, ari: 0.75712903361606, nmi: 0.9504260508480187, coverage: 0.4675000000000001, nodes: 183.72, purity: 0.9663747810858143, anchor_rho: 0.05947118381528663, disintegrated: false}
+  mmlu:      {within_cos: 0.20008723437786102, between_cos: 0.0798468291759491, gap: 0.12024040520191193, lr_acc: 0.8040816326530612, ari: 0.8223275791855474, nmi: 0.9317236255152715, coverage: 0.13430204081632652, nodes: 42.36, purity: 0.9080118694362018, anchor_rho: 0.00635946109694733, disintegrated: false}
+bge-base:
+  hf_id: BAAI/bge-base-en-v1.5
+  scicueval: {within_cos: 0.684986412525177, between_cos: 0.5973816514015198, gap: 0.08760476112365723, lr_acc: 0.97375, ari: 0.7663687781195153, nmi: 0.9447909981211986, coverage: 0.49560999999999994, nodes: 154.92, purity: 0.9574584128715571, anchor_rho: 0.19450991863738723, disintegrated: false}
+  mmlu:      {within_cos: 0.5652005672454834, between_cos: 0.49802830815315247, gap: 0.06717225909233093, lr_acc: 0.8489795918367347, ari: 0.8796014099809869, nmi: 0.9487378903482682, coverage: 0.08968163265306121, nodes: 29.64, purity: 0.9527027027027027, anchor_rho: -0.051624289310167666, disintegrated: false}

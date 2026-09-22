@@ -53,7 +53,9 @@ loss_params:
   triplet: {distance: euclidean, margin: 5.0}
   cosent: {scale: 20.0}
 
-aux:
+# Auxiliary-loss schedule (Exp 4). Named aux_schedule, not aux, because the
+# experiment grids use `aux:` for the list of auxiliary loss names.
+aux_schedule:
   subsample: 64   # aux loss computed on this many random rows of each batch
   every: 1        # ... every N optimizer steps
   lr: null        # learning rate for aux-loss parameters; null = train.lr

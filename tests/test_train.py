@@ -5,7 +5,14 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from tlf.train import checkpoint_steps, cosine_stats, frac_tag, no_duplicate_batches
+from tlf.config import load_config
+from tlf.train import (
+    aux_schedule,
+    checkpoint_steps,
+    cosine_stats,
+    frac_tag,
+    no_duplicate_batches,
+)
 
 
 def test_frac_tag_matches_brief_directory_names():
@@ -58,3 +65,13 @@ def test_cosine_stats_on_identical_and_orthogonal_rows():
     e = torch.eye(4)
     pos, neg = cosine_stats(e, e)
     assert pos == 1.0 and abs(neg) < 1e-7
+
+
+def test_aux_schedule_survives_the_exp4_grid_merge():
+    """In the merged Exp 4 config `aux` is the grid list; the schedule still resolves."""
+    cfg = load_config("configs/exp4_topo_aux.yaml")
+    assert isinstance(cfg["aux"], list)
+    sched = aux_schedule(cfg)
+    assert sched["subsample"] == 64 and sched["every"] == 1
+    assert aux_schedule({"aux": {"subsample": 8}})["subsample"] == 8  # legacy dict form
+    assert aux_schedule({"aux": ["persist0_h0"]}) == {}

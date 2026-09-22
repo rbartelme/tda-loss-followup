@@ -195,6 +195,26 @@ def resolve_device(spec: str) -> torch.device:
     return torch.device(spec)
 
 
+def aux_schedule(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The auxiliary-loss schedule section of a config.
+
+    Reads ``aux_schedule`` (``subsample``, ``every``, ``lr``). For backward
+    compatibility a dict-valued ``aux`` is accepted too; a list-valued ``aux``
+    is an experiment grid and is ignored here.
+
+    Args:
+        cfg: Resolved config.
+
+    Returns:
+        The schedule dict, possibly empty.
+    """
+    sched = cfg.get("aux_schedule")
+    if isinstance(sched, dict):
+        return sched
+    legacy = cfg.get("aux")
+    return legacy if isinstance(legacy, dict) else {}
+
+
 def load_model_roster(cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Read ``models.yaml`` named by ``paths.models_yaml``.
 
@@ -577,7 +597,7 @@ def _train_loop(
                     "step": step,
                     "total_steps": total_steps,
                     "train": tr,
-                    "aux_cfg": cfg.get("aux", {}),
+                    "aux_schedule": aux_schedule(cfg),
                 },
             )
             saved[frac_tag(frac)] = str(d)
@@ -956,7 +976,7 @@ def run_finetune(
     model.train()
     embed_dim = int(model.get_embedding_dimension() or 0)
 
-    aux_cfg = cfg.get("aux", {})
+    aux_cfg = aux_schedule(cfg)
     hook = AuxHook(
         subsample=int(aux_cfg.get("subsample", 64)),
         every=int(aux_cfg.get("every", 1)),
