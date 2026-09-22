@@ -84,8 +84,9 @@ def write_manifest(
     config_path: str | Path,
     seed: int,
     extra: dict[str, Any] | None = None,
+    name: str = "manifest.json",
 ) -> Path:
-    """Write ``manifest.json`` describing the artifact stored in ``out_dir``.
+    """Write ``out_dir/<name>`` describing an artifact stored in ``out_dir``.
 
     Args:
         out_dir: Directory holding the artifact. Created if needed.
@@ -93,6 +94,8 @@ def write_manifest(
         seed: The seed used.
         extra: Additional keys merged into the manifest (artifact-specific
             provenance such as source hashes or builder reports).
+        name: File name; defaults to ``manifest.json``. Artifacts that share a
+            directory (per-corpus embeddings) use a distinct name each.
 
     Returns:
         The path of the manifest written.
@@ -109,6 +112,6 @@ def write_manifest(
     }
     if extra:
         manifest.update(extra)
-    path = out_dir / "manifest.json"
+    path = out_dir / name
     path.write_text(json.dumps(manifest, indent=2, default=str) + "\n")
     return path

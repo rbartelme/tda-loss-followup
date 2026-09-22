@@ -59,13 +59,16 @@ aux:
   lr: null        # learning rate for aux-loss parameters; null = train.lr
 
 eval:
-  # Encoding for evaluation matches the bakeoff, not the training length.
+  # Encoding for evaluation is the bakeoff's encode_all (AutoModel + mean
+  # pool over the attention mask) at the bakeoff's length, not the training length.
   max_length: 256
   batch_size: 32
+  device: auto
   seed: 42
-  # Layer 1. 'holdout' is the bakeoff's single stratified 80/20 split.
-  # 'cv5' opts into 5-fold CV accuracy instead.
+  # Layer 1. 'holdout' is the bakeoff's single stratified 80/20 split;
+  # 'cv' opts into stratified k-fold accuracy with lr_cv_folds folds.
   lr_eval: holdout
+  lr_cv_folds: 5
   # Layer 2. Copied from tda-embedder-bakeoff MAPPER_CONFIG; do not edit.
   mapper:
     umap: {n_components: 2, n_neighbors: 15, min_dist: 0.1, metric: cosine}
@@ -80,6 +83,16 @@ eval:
   disintegrated:
     min_coverage: 0.05
     min_nodes: 5
-  # Layer 4 router.
+  # Layer 4 router. The two corpora share a label *schema* (source_subset,
+  # source_domain) but no label values, so:
+  #   mode: union       one LR over the union of both corpora's labels, trained
+  #                     on a stratified 80% of both eval splits; router_acc_in
+  #                     is accuracy on held-out SciCUEval rows, router_acc_mmlu
+  #                     on held-out MMLU rows (does the encoder route queries
+  #                     to the right source, in and out of domain?)
+  #   mode: per_corpus  two independent LRs, one per corpus (bakeoff recipe)
+  #   label: subset     10 classes per corpus (source_subset); 'domain' = 5 (source_domain)
   router:
+    mode: union
+    label: subset
     holdout_frac: 0.2
