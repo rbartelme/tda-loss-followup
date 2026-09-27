@@ -252,6 +252,11 @@ Differences between this protocol, the scaffold brief, and the code as built
    story, since the eval code is the bakeoff's verbatim). The laptop
    (16 cores, 54 GB, RTX 4070 8 GB) stays for training and smoke runs. The
    compute section is rewritten from the measured number afterwards.
+   **Note 2026-09-27.** The Spark's GB10 cannot run the bakeoff's torch 2.6.0,
+   which predates Blackwell, so `pyproject.toml` pins torch 2.13.0 for
+   aarch64 only; the laptop keeps 2.6.0. That is the one library-version
+   difference going into the Spark repro-check, and the ±0.005 check is what
+   settles whether it matters.
 9. ~~**Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
    of training, which is how checkpoints are defined; both models take the
    same number of steps on the same pair set, so a step axis is a relabel.~~

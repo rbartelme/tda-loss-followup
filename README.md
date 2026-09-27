@@ -108,6 +108,11 @@ without running anything; `--force` redoes everything.
   `make exp1 N_WORKERS=20`.
   The distance matrix is 4000 × 4000 float64 per worker under copy-on-write,
   so memory is not the constraint; cores are.
+- **torch differs by architecture.** The laptop keeps the bakeoff's torch
+  2.6.0. The DGX Spark is aarch64 with a Blackwell GB10 (sm_121, driver 580,
+  CUDA 13.0) that 2.6.0 predates, so `pyproject.toml` pins torch 2.13.0 there,
+  from PyPI's CUDA 13 aarch64 wheel. `make repro-check` on the Spark is the
+  check that the encode step agrees across the two.
 - Training wall time has not been measured yet; the dry-run only proves the
   loop. Expect the first `make exp1-final` to be dominated by the eight
   fine-tunes, each about 470 optimizer steps at batch 128.
