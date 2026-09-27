@@ -257,16 +257,24 @@ def seed_bootstrap_stability(
 
     aris: list[float] = []
     nmis: list[float] = []
-    for p1, p2 in combinations(partitions, 2):
+    pairs: list[tuple[int, int]] = []  # tlf: seed indices of each pair, for the jackknife
+    for (i, j), (p1, p2) in zip(  # tlf: + indices
+        combinations(range(len(partitions)), 2), combinations(partitions, 2)
+    ):
         mask = (p1 >= 0) & (p2 >= 0)
         if int(mask.sum()) > 1:
             aris.append(adjusted_rand_score(p1[mask], p2[mask]))
             nmis.append(normalized_mutual_info_score(p1[mask], p2[mask]))
+            pairs.append((i, j))  # tlf
 
     out["mean_ari"] = float(np.mean(aris)) if aris else 0.0
     out["mean_nmi"] = float(np.mean(nmis)) if nmis else 0.0
     out["sd_ari"] = float(np.std(aris, ddof=1)) if len(aris) > 1 else 0.0  # tlf: addition
     out["sd_nmi"] = float(np.std(nmis, ddof=1)) if len(nmis) > 1 else 0.0  # tlf: addition
+    from tlf.jackknife import pair_mean_se  # tlf: leave-one-seed-out SE (protocol item 11)
+
+    out["se_ari"] = pair_mean_se(aris, pairs, len(partitions))  # tlf: addition
+    out["se_nmi"] = pair_mean_se(nmis, pairs, len(partitions))  # tlf: addition
     if _W_ANCHOR is not None:  # tlf: per-seed anchor rho summary (protocol item 12)
         rhos = np.array([r.get("anchor_rho", np.nan) for r in stat_rows], dtype=np.float64)
         rhos = rhos[np.isfinite(rhos)]

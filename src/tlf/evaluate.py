@@ -52,6 +52,7 @@ CORE_KEYS: tuple[str, ...] = (
     "lr_acc",
     "ari",
     "ari_sd",
+    "ari_se",
     "nmi",
     "coverage",
     "nodes",
@@ -226,6 +227,11 @@ def checkpoint_stamp(ckpt_dir: Path | str) -> str:
     return "none"
 
 
+# Bumped whenever the evaluator adds or changes a metric without a config
+# change, so cached metrics from older code are recomputed rather than reused
+# with the new keys missing. 2: jackknife ari_se / nmi_se (protocol item 11).
+METRICS_VERSION = 2
+
 # ``eval`` keys that set how fast an evaluation runs, not what it returns.
 # ``n_seeds`` is keyed on its own because the driver can override it per call.
 _EVAL_SPEED_KEYS = frozenset({"device", "batch_size", "n_workers", "n_seeds"})
@@ -269,7 +275,8 @@ def metrics_cache_key(
 
     Returns:
         A JSON-safe dict: checkpoint stamp, corpus, row count and id hash,
-        encoder name, seed count, router flag and ``eval_fingerprint``.
+        encoder name, seed count, router flag, ``eval_fingerprint`` and
+        ``METRICS_VERSION``.
     """
     ids = ev["id"].astype(str).tolist()
     return {
@@ -281,6 +288,7 @@ def metrics_cache_key(
         "n_seeds": int(n_seeds),
         "with_router": bool(with_router),
         "eval_fingerprint": eval_fingerprint(cfg),
+        "metrics_version": METRICS_VERSION,
     }
 
 
@@ -571,7 +579,7 @@ def layers_2_3(
         min_nodes: Disintegration threshold on mean node count.
 
     Returns:
-        Core keys ``ari, ari_sd, nmi, nmi_sd, coverage, nodes, purity,
+        Core keys ``ari, ari_sd, ari_se, nmi, nmi_sd, nmi_se, coverage, nodes, purity,
         mean_purity, anchor_rho, anchor_p, n_pairs_used, anchor_rho_mean,
         anchor_rho_sd, n_anchor_seeds, disintegrated, n_seeds_ok`` plus every
         ``mean_*``/``cv_*`` statistic and the 18 per-feature alignment values.
@@ -613,6 +621,8 @@ def layers_2_3(
     out: dict[str, Any] = {
         "ari": float(stab.get("mean_ari", nan)),
         "ari_sd": float(stab.get("sd_ari", nan)),
+        "ari_se": float(stab.get("se_ari", nan)),
+        "nmi_se": float(stab.get("se_nmi", nan)),
         "nmi": float(stab.get("mean_nmi", nan)),
         "nmi_sd": float(stab.get("sd_nmi", nan)),
         "coverage": coverage,

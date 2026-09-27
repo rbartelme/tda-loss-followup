@@ -117,6 +117,7 @@ def test_layers_2_3_serial_on_structured_cloud():
     for k in (
         "ari",
         "ari_sd",
+        "ari_se",
         "nmi",
         "coverage",
         "nodes",

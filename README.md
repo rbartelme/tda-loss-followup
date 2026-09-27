@@ -139,7 +139,8 @@ bootstrap seeds 42–66). Layer 1 must match within ±0.005 on any machine; a
 larger difference means the evaluation sample or the encoding differs, and
 nothing downstream should be run until it is explained. Mapper results are not
 bit-reproducible across CPU architectures, so between machines ARI must agree
-within two standard errors of the difference of the two 25-seed means, and the
+within two standard errors of the difference of the two 25-seed means, each
+the leave-one-seed-out jackknife of the mean pairwise ARI (`ari_se`), and the
 first post's single-draw anchor ρ is compared only on x86_64 (protocol item 11). See
 `docs/harness-notes.md` §1 for why the sample must be byte-identical and §8
 for the MedCPT rows.

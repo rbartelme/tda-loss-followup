@@ -329,6 +329,14 @@ Differences between this protocol, the scaffold brief, and the code as built
     aggregating seeds in completion order and is gone with item 12, which
     aggregates in seed order. The laptop's MMLU gap to the first post stays
     unexplained and inside the bound.
+    **Note 2026-09-27 (jackknife).** The bound above divides the spread of the
+    300 pairwise ARIs by √25, as if they were 25 independent values. They
+    share seeds, so that is not a standard error; with additive seed effects
+    it understates the true one by about √2. The rule now uses the
+    leave-one-seed-out jackknife of the mean pairwise ARI, recorded as
+    `ari_se`: two machines agree when their means differ by at most
+    2·√(se₁² + se₂²). The table above keeps the old reading; bounds from the
+    jackknife follow once both machines have rerun.
 12. ~~**Anchor ρ estimator.** Protocol and first post: anchor Spearman ρ between
     Mapper graph distance and textstat distance, on pairs from 500 covered
     documents with a 5000-pair cap. Built, verbatim from the bakeoff: it is

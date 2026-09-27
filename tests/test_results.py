@@ -78,6 +78,7 @@ def test_csv_columns_are_exactly_the_brief_schema():
         "lr_eval",
         "ari",
         "ari_sd",
+        "ari_se",
         "nmi",
         "coverage",
         "nodes",

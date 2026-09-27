@@ -148,6 +148,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "lr_eval",
     "ari",
     "ari_sd",
+    "ari_se",
     "nmi",
     "coverage",
     "nodes",

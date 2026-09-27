@@ -124,6 +124,7 @@ def test_bootstrap_aggregates_in_seed_order_and_summarises_anchor(monkeypatch):
     assert out["n_anchor_seeds"] == 2
     assert out["mean_anchor_rho"] == pytest.approx(0.2)
     assert out["sd_anchor_rho"] == pytest.approx(np.std([0.1, 0.3], ddof=1))
+    assert out["mean_ari"] == 1.0 and out["se_ari"] == 0.0  # identical partitions
 
 
 def test_no_anchor_features_means_no_anchor_summary(monkeypatch):
