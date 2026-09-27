@@ -131,13 +131,16 @@ mean pooling, so this is the same check as evaluating the HF ids directly:
 make repro-check
 ```
 
-prints, for `biomedbert-fulltext` and `minilm` on both corpora, this repo's
+prints, for `biomedbert-fulltext`, `minilm` and `bge-base` on both corpora, this repo's
 Layer 1–3 numbers beside the rows in `configs/reference.yaml` (which were
 read from the bakeoff's cached metrics at commit `4625b22`). Every stage is
 seeded the way the bakeoff seeded it (sample seed 42, evaluation seed 42,
-bootstrap seeds 42–66). The protocol's tolerance is ±0.005 on ARI and ρ. A
+bootstrap seeds 42–66). Layer 1 must match within ±0.005 on any machine; a
 larger difference means the evaluation sample or the encoding differs, and
-nothing downstream should be run until it is explained. See
+nothing downstream should be run until it is explained. Mapper results are not
+bit-reproducible across CPU architectures, so between machines ARI must agree
+within two standard errors of the difference of the two 25-seed means, and the
+first post's single-draw anchor ρ is compared only on x86_64 (protocol item 11). See
 `docs/harness-notes.md` §1 for why the sample must be byte-identical and §8
 for the MedCPT rows.
 

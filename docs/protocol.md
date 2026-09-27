@@ -1,11 +1,12 @@
 # Loss Functions vs. Topology: Experiment Protocol
 
-**Status: walk-through complete, experiments not yet run.** The protocol below is
-as written on 2026-09-21; the discrepancies between it and the scaffold as built
-are listed under *To be resolved* at the end. Items 1–6, 9 and 10 were resolved on
-2026-09-22, each struck through with a dated resolution and its own commit; items
-7 (HF Hub push) and 8 (compute budget) are deferred until the experiments run on
-the DGX Spark.
+**Status: walk-through complete, reproduction check run, experiments not yet
+run.** The protocol below is as written on 2026-09-21; the discrepancies between
+it and the scaffold as built are listed under *To be resolved* at the end. Items
+1–6, 9 and 10 were resolved on 2026-09-22 and item 11 on 2026-09-27, each struck
+through with a dated resolution and its own commit; items 7 (HF Hub push) and 8
+(compute budget) are deferred until the experiments run on the DGX Spark, and
+item 12 (anchor ρ estimator) is decided but not yet built.
 
 Follow-up to *Beyond MTEB: A Topology-Aware Embedder Bake-Off*. The first post argued
 that training regime, not architecture, determines whether an encoder's output manifold
@@ -288,3 +289,50 @@ Differences between this protocol, the scaffold brief, and the code as built
     model size. Execution is staged with `--model`: the two core models
     first, `bge-base` when time allows. `make repro-check` now covers all
     three starting encoders against `reference.yaml`.
+11. ~~**Reproduction tolerance.** Protocol: ARI / ρ reproduce within ±0.005 on
+    the new hardware. Measured 2026-09-27 with `make repro-check` on all three
+    starting encoders, both corpora, on the laptop (x86_64, 8 workers) and the
+    DGX Spark (aarch64, 20 workers). Layer 1 agrees to four decimals on both.
+    On the laptop, SciCUEval Layers 2–3 reproduce the first post exactly (ARI,
+    anchor ρ, node count); MMLU is close but not exact, within the bound below,
+    with evaluation order inside a process the leading suspect. On the Spark,
+    ARI differs by up to 0.050 and anchor ρ by up to 0.49. UMAP is seeded but
+    not bit-reproducible across CPU architectures, and the lens and the
+    clustering both amplify last-bit differences, so the Spark's 25 seeds are
+    effectively a fresh sample. A fixed ±0.005 cannot hold across machines.~~
+
+    | row | ARI ref | laptop | Spark | bound | ρ ref | laptop | Spark |
+    |---|---|---|---|---|---|---|---|
+    | biomedbert-fulltext SciCUEval | 0.818 | 0.818 | 0.799 | 0.031 | 0.249 | 0.249 | 0.199 |
+    | biomedbert-fulltext MMLU | 0.695 | 0.701 | 0.692 | 0.058 | 0.476 | 0.476 | 0.322 |
+    | minilm SciCUEval | 0.757 | 0.757 | 0.807 | 0.040 | 0.059 | 0.059 | 0.457 |
+    | minilm MMLU | 0.822 | 0.829 | 0.798 | 0.041 | 0.006 | 0.036 | 0.015 |
+    | bge-base SciCUEval | 0.766 | 0.766 | 0.783 | 0.035 | 0.195 | 0.195 | 0.227 |
+    | bge-base MMLU | 0.880 | 0.849 | 0.845 | 0.054 | −0.052 | −0.009 | 0.440 |
+
+    **Resolved 2026-09-27.** Three rules replace the single tolerance.
+    Layer 1 (gap, LR accuracy) must match the reference within ±0.005 on any
+    machine; a miss means the sample or the encoding differs. Layers 2–3 ARI
+    from two machines must agree within two standard errors of the difference
+    of their 25-seed means, 2·√(sd₁² + sd₂²)/5, where sd is the per-seed ARI
+    spread each run records; the laptop's spread stands in for the first
+    post's. Five of six Spark rows meet it; minilm SciCUEval is +0.050 against
+    0.040, which one of six comparisons at a two-SE bound produces about a
+    quarter of the time. The first post's single-draw anchor ρ must reproduce
+    exactly on x86_64, which it does on SciCUEval, and is not compared across
+    architectures; the bootstrapped anchor ρ of item 12 takes the ARI rule
+    once it exists. Every fine-tuned checkpoint is compared against its own
+    `ckpt_0.0` evaluated on the same machine, so each machine's untrained rows
+    are the baseline for its own sweep.
+12. **Anchor ρ estimator.** Protocol and first post: anchor Spearman ρ between
+    Mapper graph distance and textstat distance, on pairs from 500 covered
+    documents with a 5000-pair cap. Built, verbatim from the bakeoff: it is
+    computed once, on the base-seed graph, so it carries no spread; and the
+    cap is filled in `itertools.combinations` order, so nearly all pairs
+    involve the first ~11 sampled documents. Anchor ρ is H1's primary metric
+    and every checkpoint's UMAP lens is effectively a new draw; the Spark run
+    above shows single draws moving by up to 0.49.
+    **Decided 2026-09-27, not yet built.** Compute it on every bootstrap
+    seed's graph with uniformly sampled pairs and report mean and sd, keeping
+    the verbatim single-draw value alongside for comparison with the first
+    post.
