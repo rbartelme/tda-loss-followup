@@ -257,6 +257,16 @@ Differences between this protocol, the scaffold brief, and the code as built
    aarch64 only; the laptop keeps 2.6.0. That is the one library-version
    difference going into the Spark repro-check, and the ±0.005 check is what
    settles whether it matters.
+   **Note 2026-09-27 (fork).** The first two Spark repro-checks lost every
+   MMLU Mapper seed. The aarch64 numba has no TBB and falls back to GNU
+   OpenMP; once the parent has run parallel numba code (UMAP after the
+   SciCUEval bootstrap), numba kills each forked worker that runs parallel
+   code. An earlier fix set `OMP_NUM_THREADS=1`, on the mistaken reading that
+   the message came from torch; it is replaced by defaulting
+   `NUMBA_THREADING_LAYER=forksafe` on import (TBB on the laptop, workqueue
+   on the Spark). The laptop control run of the same day evaluated
+   `biomedbert-fulltext` and `minilm` under `OMP_NUM_THREADS=1` and
+   `bge-base` without it; numba was on TBB throughout.
 9. ~~**Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
    of training, which is how checkpoints are defined; both models take the
    same number of steps on the same pair set, so a step axis is a relabel.~~

@@ -2,21 +2,23 @@
 
 import os
 
-# Set before anything imports torch; every entry point imports tlf first.
+# Set before numba or tokenizers load; every entry point imports tlf first.
 #
-# Newer PyTorch (2.13 on the DGX Spark; 2.6.0 on the laptop has no such check)
-# kills a forked child if the parent has already used GNU OpenMP:
+# The bakeoff's Mapper bootstrap forks its workers after the parent has run
+# parallel numba code (UMAP / pynndescent), and numba's threading layer decides
+# whether that fork survives. On the laptop numba finds the system TBB library,
+# which is fork-safe. The aarch64 numba wheel on the DGX Spark has no TBB
+# support and falls back to GNU OpenMP, which is not, so numba kills every
+# forked child with
 #   "Terminating: fork() called from a process already using GNU OpenMP, this
 #    is unsafe."
-# The bakeoff's Mapper bootstrap forks its workers after the model has run CPU
-# ops, so on the Spark every worker died and each seed came back as
-# BrokenProcessPool. With one OpenMP thread torch never starts a thread team,
-# and nothing is lost: encoding runs on the GPU and the bootstrap workers are
-# single-threaded by design. The same fork makes tokenizers print a warning
-# block per worker unless its parallelism is set explicitly.
+# and each seed comes back as BrokenProcessPool. "forksafe" makes numba take
+# TBB where it exists and its own workqueue layer otherwise: the laptop is
+# unchanged and the Spark never touches OpenMP. The same fork makes tokenizers
+# print a warning block per worker unless its parallelism is set explicitly.
 #
 # setdefault, so a value exported in the shell still wins.
-os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("NUMBA_THREADING_LAYER", "forksafe")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 __version__ = "0.1.0"

@@ -113,9 +113,10 @@ without running anything; `--force` redoes everything.
   CUDA 13.0) that 2.6.0 predates, so `pyproject.toml` pins torch 2.13.0 there,
   from PyPI's CUDA 13 aarch64 wheel. `make repro-check` on the Spark is the
   check that the encode step agrees across the two.
-  Importing `tlf` also defaults `OMP_NUM_THREADS` to 1: torch 2.13 kills a
-  forked child once the parent has used OpenMP, which is how the Mapper
-  bootstrap starts its workers. Export a value to override it.
+  Importing `tlf` also sets numba's threading layer to `forksafe`. The
+  Spark's aarch64 numba has no TBB, so it otherwise falls back to GNU
+  OpenMP and kills the forked Mapper workers; the laptop stays on TBB.
+  Export `NUMBA_THREADING_LAYER` to override it.
 - Training wall time has not been measured yet; the dry-run only proves the
   loop. Expect the first `make exp1-final` to be dominated by the eight
   fine-tunes, each about 470 optimizer steps at batch 128.
