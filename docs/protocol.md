@@ -362,8 +362,14 @@ Differences between this protocol, the scaffold brief, and the code as built
     it understates the true one by about √2. The rule now uses the
     leave-one-seed-out jackknife of the mean pairwise ARI, recorded as
     `ari_se`: two machines agree when their means differ by at most
-    2·√(se₁² + se₂²). The table above keeps the old reading; bounds from the
-    jackknife follow once both machines have rerun.
+    2·√(se₁² + se₂²). The table above keeps the old reading. From the
+    laptop and Spark reruns of the same day, whose aggregates match the
+    earlier runs exactly, the jackknife bounds between the two machines are
+    0.037 and 0.066 (`biomedbert-fulltext` SciCUEval, MMLU), 0.047 and 0.045
+    (`minilm`) and 0.039 and 0.040 (`bge-base`). The jackknife error is 10–20%
+    above the old reading on five rows and below it on `bge-base` MMLU. Five
+    rows fall inside; `minilm` SciCUEval stays just outside, +0.050 against
+    0.047.
 12. ~~**Anchor ρ estimator.** Protocol and first post: anchor Spearman ρ between
     Mapper graph distance and textstat distance, on pairs from 500 covered
     documents with a 5000-pair cap. Built, verbatim from the bakeoff: it is
