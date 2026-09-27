@@ -3,9 +3,9 @@
 **Status: walk-through complete, reproduction check run, experiments not yet
 run.** The protocol below is as written on 2026-09-21; the discrepancies between
 it and the scaffold as built are listed under *To be resolved* at the end. Items
-1–6, 9 and 10 were resolved on 2026-09-22 and items 11 and 12 on 2026-09-27, each
-struck through with a dated resolution and its own commit; items 7 (HF Hub push)
-and 8 (compute budget) are deferred until the experiments run on the DGX Spark.
+1–6, 9 and 10 were resolved on 2026-09-22 and items 8, 11 and 12 on 2026-09-27,
+each struck through with a dated resolution and its own commit; item 7 (HF Hub
+push) is deferred until the experiments have run.
 
 Follow-up to *Beyond MTEB: A Topology-Aware Embedder Bake-Off*. The first post argued
 that training regime, not architecture, determines whether an encoder's output manifold
@@ -239,11 +239,11 @@ Differences between this protocol, the scaffold brief, and the code as built
    a CSV row (about 45 checkpoints, ~14 GB) rather than final only (~7.5 GB)
    or all fractions (~30 GB). Untrained checkpoints are the public base
    models and are not pushed. Still open: namespace, public vs. private.
-8. **Compute budget.** Protocol: ~40 min (SciCUEval) + ~25 min (MMLU) per
+8. ~~**Compute budget.** Protocol: ~40 min (SciCUEval) + ~25 min (MMLU) per
    row. The bakeoff README's own figure (~100 min for 28 encoder-corpus
    evaluations at 8 workers) implies about 3.5 min each. A 10× gap;
    `make repro-check` measures it on the current machine before Spark time
-   is booked.
+   is booked.~~
    **Deferred 2026-09-22.** A wall-clock question, so it is measured where
    the sweep will run: `make repro-check` on the DGX Spark once it is online
    (this week), at the worker count the sweep will use, with the two corpora
@@ -267,6 +267,33 @@ Differences between this protocol, the scaffold brief, and the code as built
    on the Spark). The laptop control run of the same day evaluated
    `biomedbert-fulltext` and `minilm` under `OMP_NUM_THREADS=1` and
    `bge-base` without it; numba was on TBB throughout.
+   **Resolved 2026-09-27** for evaluation; training is timed by the first
+   `exp1-final`. Spark times are from the fourth repro-check (20 workers,
+   per-seed anchor ρ on, encodings cached), with encoding on the GB10
+   estimated from the first Spark run; laptop times are the control run of
+   the same day (8 workers, encoding on the RTX 4070 included).
+
+   | model | SciCUEval | MMLU | encoding | Spark per checkpoint | laptop per checkpoint |
+   |---|---|---|---|---|---|
+   | biomedbert-fulltext | 109 s | 84 s | ~46 s | ~4.0 min | 7.2 min |
+   | minilm | 54 s | 18 s | ~12 s | ~1.4 min | 6.0 min |
+   | bge-base | 73 s | 40 s | ~33 s | ~2.4 min | 7.5 min |
+
+   The sweep is 25 fine-tunes: Exp 1's 12, then 3, 2 and 8 more from Exps
+   2–4, which share Exp 1's `biomedbert-fulltext` τ 0.05 random run. With
+   the three untrained base models that is 28 checkpoints at init and final,
+   18 of them `biomedbert-fulltext`, or about 1.5 hours of evaluation. Exp 1's
+   intermediate fractions add at most 36 checkpoints and 1.6 hours, less in
+   practice since step 3 fills only the τ values that moved. So evaluation
+   is at most about 3 hours on the Spark, against the protocol's 20–25. The
+   protocol's 65 minutes per checkpoint was 9–11 times too high on the laptop
+   and 16–46 times on the Spark; the bakeoff README's 3.5 minutes per
+   evaluation was close. The corpora run in sequence rather than
+   concurrently, which at these times is not worth building. Fine-tuned
+   checkpoints may give larger graphs and slower bootstraps; the first
+   `exp1-final` will show. Training is 25 runs of 468 optimizer steps (20k
+   pairs, batch 128, 3 epochs; Exp 2's continued-MLM control batches texts
+   instead), and its wall time has not been measured on either machine.
 9. ~~**Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
    of training, which is how checkpoints are defined; both models take the
    same number of steps on the same pair set, so a step axis is a relabel.~~

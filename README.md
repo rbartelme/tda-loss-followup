@@ -99,13 +99,12 @@ without running anything; `--force` redoes everything.
   other losses accumulate over the same micro-batch. Evaluation encodes with
   the bakeoff's `encode_all` at `max_length 256`, batch 32.
 - **Mapper sweeps run on Spark.** UMAP single-threads itself when seeded, so
-  the 25-seed bootstrap is parallelised across forked worker processes. The
-  bakeoff's README reports about 100 minutes for 28 (encoder, corpus)
-  evaluations at 8 workers; `docs/protocol.md` budgets more conservatively at
-  about 40 minutes per SciCUEval row and 25 per MMLU row, roughly 60 hours for
-  the whole sweep on 8 workers or 20–25 on the DGX Spark at 20. Exp 1 with
-  `--only-final` is 32 evaluations; the full Exp 1 is 80. On Spark use
-  `make exp1 N_WORKERS=20`.
+  the 25-seed bootstrap is parallelised across forked worker processes.
+  Measured on the Spark at 20 workers, one checkpoint takes about 1.4–4
+  minutes for both corpora including encoding, against 6–7.5 on the laptop
+  at 8 workers, so the whole sweep is at most about 3 hours of evaluation
+  (protocol item 8). Exp 1 with `--only-final` writes 48 result rows; the
+  full Exp 1 writes 120. On Spark use `make exp1 N_WORKERS=20`.
   The distance matrix is 4000 × 4000 float64 per worker under copy-on-write,
   so memory is not the constraint; cores are.
 - **torch differs by architecture.** The laptop keeps the bakeoff's torch
