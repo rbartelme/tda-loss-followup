@@ -230,7 +230,8 @@ def checkpoint_stamp(ckpt_dir: Path | str) -> str:
 # Bumped whenever the evaluator adds or changes a metric without a config
 # change, so cached metrics from older code are recomputed rather than reused
 # with the new keys missing. 2: jackknife ari_se / nmi_se (protocol item 11).
-METRICS_VERSION = 2
+# 3: per_seed and pairwise lists.
+METRICS_VERSION = 3
 
 # ``eval`` keys that set how fast an evaluation runs, not what it returns.
 # ``n_seeds`` is keyed on its own because the driver can override it per call.
@@ -585,13 +586,16 @@ def layers_2_3(
         ``mean_*``/``cv_*`` statistic and the 18 per-feature alignment values.
         ``anchor_rho`` is the bakeoff's single draw on the base-seed graph;
         the ``anchor_rho_mean`` family is NaN when ``anchor_per_seed`` is off.
+        ``per_seed`` holds one list per statistic across successful seeds
+        (see ``per_seed_lists``), and ``pairwise`` the ``seed_a``, ``seed_b``,
+        ``ari`` and ``nmi`` of every pair behind the mean ARI.
     """
     emb = bt.l2_normalize(np.asarray(X, dtype=np.float32))
     bt.assert_normalized(emb)
     n = emb.shape[0]
     dist = bt.compute_distance_matrix(emb)
     ts = bt.standardize(np.asarray(textstat_raw, dtype=np.float32))
-    stab, _rows = bt.seed_bootstrap_stability(
+    stab, rows = bt.seed_bootstrap_stability(
         emb,
         dist,
         n,
@@ -602,6 +606,7 @@ def layers_2_3(
         anchor_features=ts if anchor_per_seed else None,
         anchor_kwargs={"max_docs": anchor_max_docs, "max_pairs": anchor_max_pairs},
     )
+    pairwise = stab.pop("_pairwise", {})
     graph, lens = bt.build_mapper_for_seed(emb, dist, base_seed, mapper_config)
     G = bt.mapper_to_networkx(graph)
     cat = bt.categorical_anchor_purity(G, list(labels))
@@ -640,7 +645,29 @@ def layers_2_3(
     }
     out.update({k: float(v) for k, v in stab.items() if k not in ("_error",)})
     out.update(pfa)
+    out["per_seed"] = per_seed_lists(rows)
+    out["pairwise"] = pairwise
     return out
+
+
+def per_seed_lists(rows: Sequence[dict[str, Any]]) -> dict[str, list[float]]:
+    """Column lists of the bootstrap's per-seed rows, for figures and re-analysis.
+
+    Args:
+        rows: Per-seed stat rows from ``seed_bootstrap_stability``, in seed
+            order, each with a ``seed`` and the graph statistics (plus
+            ``anchor_rho`` and ``anchor_n_pairs`` when per-seed anchor rho ran).
+
+    Returns:
+        ``{"seed": [...], <stat>: [...], ...}``; a statistic missing from a row
+        is NaN there, and every list has one entry per successful seed.
+    """
+    keys = ["seed", *bt.GRAPH_STAT_KEYS, "anchor_rho", "anchor_n_pairs"]
+    present = [k for k in keys if any(k in r for r in rows)]
+    return {
+        k: [int(r[k]) if k == "seed" else float(r.get(k, np.nan)) for r in rows]
+        for k in present
+    }
 
 
 def router_layer(

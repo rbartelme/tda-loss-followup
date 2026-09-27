@@ -130,6 +130,11 @@ def test_layers_2_3_serial_on_structured_cloud():
         assert k in out
     assert out["n_seeds_ok"] == 2
     assert out["n_anchor_seeds"] == 2 and np.isfinite(out["anchor_rho_mean"])
+    ps, pw = out["per_seed"], out["pairwise"]
+    assert ps["seed"] == [42, 43] and len(ps["n_nodes"]) == 2
+    assert np.mean(ps["anchor_rho"]) == pytest.approx(out["anchor_rho_mean"])
+    assert (pw["seed_a"], pw["seed_b"]) == ([42], [43])
+    assert pw["ari"] == pytest.approx([out["ari"]])
     assert out["nodes"] >= 5 and out["coverage"] > 0.5
     assert out["purity"] > 0.5  # nodes follow the super-cluster labels
     assert out["n_pairs_used"] >= 100  # anchor rho actually computed

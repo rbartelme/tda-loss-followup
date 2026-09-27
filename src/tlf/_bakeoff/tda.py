@@ -219,7 +219,7 @@ def seed_bootstrap_stability(
         for seed in seeds:
             try:
                 stat_row, partition = _seed_worker(seed)
-                stat_rows.append(stat_row)
+                stat_rows.append({**stat_row, "seed": seed})  # tlf: + seed
                 partitions.append(partition)
             except Exception as e:  # noqa: BLE001
                 print(f"    seed {seed} failed: {e!r}", file=sys.stderr)
@@ -238,7 +238,7 @@ def seed_bootstrap_stability(
         # order moved the last bits of every mean and sd between runs.
         for seed in sorted(by_seed):
             stat_row, partition = by_seed[seed]
-            stat_rows.append(stat_row)
+            stat_rows.append({**stat_row, "seed": seed})  # tlf: + seed
             partitions.append(partition)
 
     if len(stat_rows) < 2:
@@ -275,6 +275,13 @@ def seed_bootstrap_stability(
 
     out["se_ari"] = pair_mean_se(aris, pairs, len(partitions))  # tlf: addition
     out["se_nmi"] = pair_mean_se(nmis, pairs, len(partitions))  # tlf: addition
+    ok = [row["seed"] for row in stat_rows]  # tlf: pairwise values, for per-seed figures
+    out["_pairwise"] = {  # tlf: popped by the caller before its float conversion
+        "seed_a": [ok[i] for i, _ in pairs],
+        "seed_b": [ok[j] for _, j in pairs],
+        "ari": [float(a) for a in aris],
+        "nmi": [float(v) for v in nmis],
+    }
     if _W_ANCHOR is not None:  # tlf: per-seed anchor rho summary (protocol item 12)
         rhos = np.array([r.get("anchor_rho", np.nan) for r in stat_rows], dtype=np.float64)
         rhos = rhos[np.isfinite(rhos)]

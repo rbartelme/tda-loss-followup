@@ -121,6 +121,9 @@ def test_bootstrap_aggregates_in_seed_order_and_summarises_anchor(monkeypatch):
         anchor_features=np.zeros((4, 1)),
     )
     assert [r["n_nodes"] for r in rows] == [42.0, 43.0, 44.0]
+    assert [r["seed"] for r in rows] == [42, 43, 44]
+    assert out["_pairwise"]["seed_a"] == [42, 42, 43]
+    assert out["_pairwise"]["seed_b"] == [43, 44, 44]
     assert out["n_anchor_seeds"] == 2
     assert out["mean_anchor_rho"] == pytest.approx(0.2)
     assert out["sd_anchor_rho"] == pytest.approx(np.std([0.1, 0.3], ddof=1))
