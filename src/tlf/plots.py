@@ -1046,6 +1046,79 @@ def load_machine_metrics(
     return out
 
 
+def _violin_row(
+    ax: plt.Axes,
+    vals: np.ndarray,
+    y: float,
+    mean: float,
+    sd: float,
+    single: float | None = None,
+) -> None:
+    """Draw one horizontal violin with its seeds, mean, whisker and single draw.
+
+    Args:
+        ax: Axes to draw on.
+        vals: Finite per-seed values (at least two, not all equal).
+        y: Row centre.
+        mean: Mean of the per-seed values.
+        sd: Their standard deviation (the whisker is two standard errors).
+        single: The single-draw value to mark with an open diamond, if any.
+    """
+    kde = gaussian_kde(vals)
+    grid = np.linspace(vals.min(), vals.max(), 200)
+    dens = kde(grid)
+    peak = float(dens.max())
+    half = VIOLIN_HALF * dens / peak
+    ax.fill_between(
+        grid,
+        y - half,
+        y + half,
+        facecolor=VIOLIN_FILL,
+        edgecolor=INK["muted"],
+        linewidth=0.6,
+        zorder=1,
+    )
+    ax.plot(
+        vals,
+        np.full(vals.size, y),
+        "|",
+        color=INK["secondary"],
+        alpha=0.6,
+        markersize=3.5,
+        markeredgewidth=0.6,
+        zorder=2,
+    )
+    se = sd / np.sqrt(vals.size)
+    at_mean = VIOLIN_HALF * float(kde(mean)[0]) / peak
+    ax.plot(
+        [mean, mean],
+        [y - at_mean, y + at_mean],
+        color=INK["primary"],
+        lw=1.4,
+        solid_capstyle="butt",
+        zorder=3,
+    )
+    ax.plot(
+        [mean - 2 * se, mean + 2 * se],
+        [y, y],
+        color=INK["primary"],
+        lw=1.0,
+        solid_capstyle="butt",
+        zorder=3,
+    )
+    if single is not None and np.isfinite(single):
+        ax.plot(
+            [single],
+            [y],
+            "D",
+            markersize=4.2,
+            markerfacecolor=INK["surface"],
+            markeredgecolor=SINGLE_DRAW_COLOR,
+            markeredgewidth=1.3,
+            zorder=4,
+        )
+
+
 def fig_anchor_per_seed(
     machines: dict[str, dict[tuple[str, str], dict[str, Any]]],
     out: str | Path,
@@ -1101,59 +1174,13 @@ def fig_anchor_per_seed(
         for c, _model, y, m in rows:
             if c != corpus:
                 continue
-            vals = _finite(m["per_seed"]["anchor_rho"])
-            kde = gaussian_kde(vals)
-            grid = np.linspace(vals.min(), vals.max(), 200)
-            dens = kde(grid)
-            peak = float(dens.max())
-            half = VIOLIN_HALF * dens / peak
-            ax.fill_between(
-                grid,
-                y - half,
-                y + half,
-                facecolor=VIOLIN_FILL,
-                edgecolor=INK["muted"],
-                linewidth=0.6,
-                zorder=1,
-            )
-            ax.plot(
-                vals,
-                np.full(vals.size, y),
-                "|",
-                color=INK["secondary"],
-                alpha=0.6,
-                markersize=3.5,
-                markeredgewidth=0.6,
-                zorder=2,
-            )
-            mean = float(m["anchor_rho_mean"])
-            se = float(m["anchor_rho_sd"]) / np.sqrt(vals.size)
-            at_mean = VIOLIN_HALF * float(kde(mean)[0]) / peak
-            ax.plot(
-                [mean, mean],
-                [y - at_mean, y + at_mean],
-                color=INK["primary"],
-                lw=1.4,
-                solid_capstyle="butt",
-                zorder=3,
-            )
-            ax.plot(
-                [mean - 2 * se, mean + 2 * se],
-                [y, y],
-                color=INK["primary"],
-                lw=1.0,
-                solid_capstyle="butt",
-                zorder=3,
-            )
-            ax.plot(
-                [float(m["anchor_rho"])],
-                [y],
-                "D",
-                markersize=4.2,
-                markerfacecolor=INK["surface"],
-                markeredgecolor=SINGLE_DRAW_COLOR,
-                markeredgewidth=1.3,
-                zorder=4,
+            _violin_row(
+                ax,
+                _finite(m["per_seed"]["anchor_rho"]),
+                y,
+                float(m["anchor_rho_mean"]),
+                float(m["anchor_rho_sd"]),
+                float(m["anchor_rho"]),
             )
         ax.set_xlim(lo - pad, hi + pad)
         ax.set_ylim(-(len(models) - 1) * step - len(labels) + 0.45, 0.75)
@@ -1194,6 +1221,176 @@ def fig_anchor_per_seed(
         " at the observed range; ticks mark the 25 seeds.\nBlack line: mean, with a"
         " ± 2 SE whisker. Diamond: the first post's single-draw estimator on that"
         " machine (seed-42 graph, pairs in combinations order).",
+    )
+    fig.tight_layout(w_pad=1.2)
+    return _save(fig, Path(out))
+
+
+# The first post's MLM-only encoders; every other roster row is contrastive.
+MLM_KEYS: frozenset[str] = frozenset(
+    {
+        "bioformer-8l",
+        "biomedbert-abstract",
+        "biomedbert-fulltext",
+        "scibert",
+        "clinicalbert",
+    }
+)
+
+
+def load_reanalysis(root: str | Path) -> dict[tuple[str, str], dict[str, Any]]:
+    """Read ``scripts/reanalyse_bakeoff.py`` output.
+
+    Args:
+        root: Its ``--out`` directory, laid out as ``<root>/<key>/<corpus>.metrics.json``.
+
+    Returns:
+        ``{(key, corpus): metrics}``.
+    """
+    import json
+
+    return {
+        (p.parent.name, p.name.split(".")[0]): json.loads(p.read_text())
+        for p in sorted(Path(root).glob("*/*.metrics.json"))
+    }
+
+
+def _scorable(m: dict[str, Any], min_seeds: int) -> bool:
+    """Whether a row has a per-seed anchor rho worth drawing.
+
+    Args:
+        m: One row's metrics.
+        min_seeds: Fewest seeds with a finite anchor rho.
+
+    Returns:
+        False for a disintegrated graph or too few scorable seeds.
+    """
+    return not m.get("disintegrated", False) and m.get("n_anchor_seeds", 0) >= min_seeds
+
+
+def roster_order(
+    metrics: dict[tuple[str, str], dict[str, Any]],
+    order_by: str = "scicueval",
+    min_seeds: int = 5,
+) -> list[str]:
+    """Encoder keys, highest per-seed anchor rho first on one corpus.
+
+    Args:
+        metrics: ``load_reanalysis`` output.
+        order_by: Corpus whose per-seed mean sets the order.
+        min_seeds: Rows below this many scorable seeds sort last.
+
+    Returns:
+        Keys in display order, top to bottom.
+    """
+    keys = sorted({k for k, _ in metrics})
+
+    def rank(k: str) -> tuple[bool, float]:
+        m = metrics.get((k, order_by), {})
+        ok = bool(m) and _scorable(m, min_seeds)
+        return (not ok, -float(m.get("anchor_rho_mean", 0.0)) if ok else 0.0)
+
+    return sorted(keys, key=rank)
+
+
+def fig_anchor_roster(
+    metrics: dict[tuple[str, str], dict[str, Any]],
+    out: str | Path,
+    order_by: str = "scicueval",
+    min_seeds: int = 5,
+) -> Path:
+    """Per-seed anchor rho for every first-post row, against the published value.
+
+    Both corpus panels share one x scale and one row order (``roster_order``),
+    so an encoder sits on the same line in each. Rows are drawn with
+    ``_violin_row``; the diamond is the value the first post published
+    (``published.anchor_spearman_rho``), and a disintegrated row gets a word
+    instead of marks.
+
+    Args:
+        metrics: ``load_reanalysis`` output.
+        out: PNG path.
+        order_by: Corpus that sets the row order.
+        min_seeds: Fewest scorable seeds for a row to be drawn.
+
+    Returns:
+        The written path.
+    """
+    keys = roster_order(metrics, order_by, min_seeds)
+    xs: list[float] = []
+    for m in metrics.values():
+        if _scorable(m, min_seeds):
+            xs += list(_finite(m["per_seed"]["anchor_rho"]))
+            xs += list(_finite([m.get("published", {}).get("anchor_spearman_rho")]))
+    lo, hi = min(xs), max(xs)
+    pad = 0.04 * (hi - lo)
+    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.27 * len(keys) + 0.9)
+    for ax, corpus in zip(axes[0], REPRO_CORPORA, strict=True):
+        _style(ax)
+        ax.axvline(0.0, color=INK["baseline"], lw=0.6, zorder=0)
+        for r, key in enumerate(keys):
+            y = -float(r)
+            m = metrics.get((key, corpus))
+            if m is None:
+                continue
+            if not _scorable(m, min_seeds):
+                ax.text(
+                    lo,
+                    y,
+                    "disintegrated",
+                    ha="left",
+                    va="center",
+                    fontsize=6.5,
+                    style="italic",
+                    color=INK["muted"],
+                )
+                continue
+            _violin_row(
+                ax,
+                _finite(m["per_seed"]["anchor_rho"]),
+                y,
+                float(m["anchor_rho_mean"]),
+                float(m["anchor_rho_sd"]),
+                m.get("published", {}).get("anchor_spearman_rho"),
+            )
+        ax.set_xlim(lo - pad, hi + pad)
+        ax.set_ylim(-len(keys) + 0.45, 0.6)
+        ax.spines["left"].set_visible(False)
+        ax.set_yticks([])
+        _range_frame(ax, x=[lo, hi])
+        ax.set_xlabel("anchor ρ", fontsize=7.5)
+        ax.set_title(CORPUS_LABEL[corpus], loc="left", fontsize=8.5, pad=4)
+    left, right = axes[0][0], axes[0][-1]
+    for r, key in enumerate(keys):
+        left.text(
+            -0.03,
+            -float(r),
+            key,
+            transform=left.get_yaxis_transform(),
+            ha="right",
+            va="center",
+            fontsize=7,
+            color=INK["primary"],
+        )
+        if key in MLM_KEYS:
+            right.text(
+                1.02,
+                -float(r),
+                "MLM",
+                transform=right.get_yaxis_transform(),
+                ha="left",
+                va="center",
+                fontsize=6.5,
+                color=INK["muted"],
+            )
+    _title(fig, "Anchor ρ per seed for every encoder in the first post")
+    _footnote(
+        fig,
+        f"Laptop, 25 bootstrap graphs per row, sorted by {CORPUS_LABEL[order_by]}"
+        " per-seed mean. Violins, ticks and black line as in the two-machine"
+        " figure.\nDiamond: the value the first post published (one graph, pairs"
+        " in combinations order). MLM: masked-language pretraining only; the other"
+        " rows are contrastive.",
     )
     fig.tight_layout(w_pad=1.2)
     return _save(fig, Path(out))

@@ -12,7 +12,9 @@ from tlf.plots import (
     REPRO_MODELS,
     _fraction_label,
     fig_anchor_per_seed,
+    fig_anchor_roster,
     make_all,
+    roster_order,
 )
 from tlf.results import append_row, make_row
 
@@ -196,3 +198,44 @@ def test_fig_anchor_per_seed_refuses_metrics_without_per_seed_values(tmp_path):
             {"laptop": _machine(np.random.default_rng(0), per_seed=False)},
             tmp_path / "f.png",
         )
+
+
+def _roster(rng):
+    """Synthetic re-analysis output: three keys, one disintegrated on MMLU.
+
+    Args:
+        rng: Random generator.
+
+    Returns:
+        ``{(key, corpus): metrics}`` shaped like ``load_reanalysis`` output.
+    """
+    out = {}
+    for key, centre in (("low", 0.05), ("high", 0.4), ("mid", 0.2)):
+        for corpus in REPRO_CORPORA:
+            vals = rng.normal(centre, 0.1, 25)
+            out[(key, corpus)] = {
+                "per_seed": {"seed": list(range(42, 67)), "anchor_rho": vals.tolist()},
+                "anchor_rho_mean": float(vals.mean()),
+                "anchor_rho_sd": float(vals.std(ddof=1)),
+                "n_anchor_seeds": 25.0,
+                "disintegrated": False,
+                "published": {"anchor_spearman_rho": float(centre)},
+            }
+    out[("mid", "mmlu")].update(disintegrated=True, n_anchor_seeds=0.0)
+    return out
+
+
+def test_roster_order_sorts_by_per_seed_mean():
+    """Highest SciCUEval per-seed mean first; the order is shared by both panels."""
+    assert roster_order(_roster(np.random.default_rng(0))) == ["high", "mid", "low"]
+
+
+def test_roster_order_puts_unscorable_rows_last():
+    """A row disintegrated on the ordering corpus sorts to the bottom."""
+    assert roster_order(_roster(np.random.default_rng(0)), order_by="mmlu")[-1] == "mid"
+
+
+def test_fig_anchor_roster_renders_with_a_disintegrated_row(tmp_path):
+    """The all-encoder figure draws, writing a word where a graph disintegrated."""
+    out = fig_anchor_roster(_roster(np.random.default_rng(0)), tmp_path / "r.png")
+    assert out.is_file() and out.stat().st_size > 10_000

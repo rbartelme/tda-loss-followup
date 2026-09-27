@@ -12,7 +12,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tlf.plots import fig_anchor_per_seed, load_machine_metrics, load_reference
+from tlf.plots import (
+    fig_anchor_per_seed,
+    fig_anchor_roster,
+    load_machine_metrics,
+    load_reanalysis,
+    load_reference,
+)
 
 
 def main() -> None:
@@ -21,19 +27,31 @@ def main() -> None:
     ap.add_argument(
         "--machine",
         action="append",
-        required=True,
+        default=[],
         metavar="LABEL=DIR",
         help="machine label and its embeddings/ directory; repeat, in display order",
     )
     ap.add_argument("--reference", type=Path, default=Path("configs/reference.yaml"))
     ap.add_argument("--out", type=Path, default=Path("figures/anchor-per-seed.png"))
+    ap.add_argument(
+        "--roster",
+        type=Path,
+        default=None,
+        help="scripts/reanalyse_bakeoff.py output; also draws the all-encoder figure",
+    )
+    ap.add_argument(
+        "--roster-out", type=Path, default=Path("figures/anchor-roster.png")
+    )
     args = ap.parse_args()
-    ref = load_reference(args.reference)
-    machines = {}
-    for spec in args.machine:
-        label, _, root = spec.partition("=")
-        machines[label] = load_machine_metrics(root, ref)
-    print(fig_anchor_per_seed(machines, args.out))
+    if args.machine:
+        ref = load_reference(args.reference)
+        machines = {}
+        for spec in args.machine:
+            label, _, root = spec.partition("=")
+            machines[label] = load_machine_metrics(root, ref)
+        print(fig_anchor_per_seed(machines, args.out))
+    if args.roster is not None:
+        print(fig_anchor_roster(load_reanalysis(args.roster), args.roster_out))
 
 
 if __name__ == "__main__":
