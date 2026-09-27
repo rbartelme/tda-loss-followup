@@ -35,6 +35,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import yaml  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
+from scipy.stats import gaussian_kde  # noqa: E402
 
 from tlf.results import load_results  # noqa: E402
 
@@ -1009,6 +1010,8 @@ def fig_exp4_pareto(
 
 REPRO_MODELS: tuple[str, ...] = ("biomedbert-fulltext", "minilm", "bge-base")
 REPRO_CORPORA: tuple[str, ...] = ("scicueval", "mmlu")
+VIOLIN_FILL = "#e3e2da"  # tint between INK baseline and surface: shape, not identity
+VIOLIN_HALF = 0.4  # half-height of the widest violin, in row units
 SINGLE_DRAW_COLOR = CATEGORICAL[
     1
 ]  # the one accent; machines are told apart by position
@@ -1051,9 +1054,11 @@ def fig_anchor_per_seed(
     """Per-seed anchor rho on each machine against the first post's single draw.
 
     One panel per corpus on a shared x scale; within a panel, one row per
-    (model, machine). Ticks are the per-seed values, the black bar is their
-    mean with a two-standard-error whisker, and the open diamond is the
-    bakeoff's single draw.
+    (model, machine). Each row is a horizontal violin: a Gaussian kernel
+    density of the per-seed values, cut at their observed range and scaled to
+    a common maximum width, with the seeds as ticks on its centre line. The
+    black line is their mean, with a two-standard-error whisker, and the open
+    diamond is the bakeoff's single draw on the seed-42 graph.
 
     Args:
         machines: ``{machine label: load_machine_metrics(...)}``, in display order.
@@ -1081,9 +1086,7 @@ def fig_anchor_per_seed(
                     raise ValueError(
                         f"{machine} {model} {corpus}: no per-seed anchor rho"
                     )
-                rows.append(
-                    (corpus, model, -(i * step + j), {**m, "_machine": machine})
-                )
+                rows.append((corpus, model, -(i * step + j), m))
 
     xs = [v for _, _, _, m in rows for v in m["per_seed"]["anchor_rho"]]
     xs += [m["anchor_rho"] for _, _, _, m in rows]
@@ -1091,7 +1094,7 @@ def fig_anchor_per_seed(
     lo, hi = min(xs), max(xs)
     pad = 0.04 * (hi - lo)
 
-    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.36 * step * len(models) + 0.6)
+    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.4 * step * len(models) + 0.6)
     for ax, corpus in zip(axes[0], REPRO_CORPORA, strict=True):
         _style(ax)
         ax.axvline(0.0, color=INK["baseline"], lw=0.6, zorder=0)
@@ -1099,38 +1102,52 @@ def fig_anchor_per_seed(
             if c != corpus:
                 continue
             vals = _finite(m["per_seed"]["anchor_rho"])
+            kde = gaussian_kde(vals)
+            grid = np.linspace(vals.min(), vals.max(), 200)
+            dens = kde(grid)
+            peak = float(dens.max())
+            half = VIOLIN_HALF * dens / peak
+            ax.fill_between(
+                grid,
+                y - half,
+                y + half,
+                facecolor=VIOLIN_FILL,
+                edgecolor=INK["muted"],
+                linewidth=0.6,
+                zorder=1,
+            )
             ax.plot(
                 vals,
-                np.full(vals.size, y + 0.1),
+                np.full(vals.size, y),
                 "|",
                 color=INK["secondary"],
-                alpha=0.55,
-                markersize=6,
-                markeredgewidth=0.7,
+                alpha=0.6,
+                markersize=3.5,
+                markeredgewidth=0.6,
                 zorder=2,
             )
             mean = float(m["anchor_rho_mean"])
             se = float(m["anchor_rho_sd"]) / np.sqrt(vals.size)
+            at_mean = VIOLIN_HALF * float(kde(mean)[0]) / peak
+            ax.plot(
+                [mean, mean],
+                [y - at_mean, y + at_mean],
+                color=INK["primary"],
+                lw=1.4,
+                solid_capstyle="butt",
+                zorder=3,
+            )
             ax.plot(
                 [mean - 2 * se, mean + 2 * se],
-                [y - 0.28, y - 0.28],
+                [y, y],
                 color=INK["primary"],
                 lw=1.0,
                 solid_capstyle="butt",
                 zorder=3,
             )
             ax.plot(
-                [mean],
-                [y - 0.28],
-                "|",
-                color=INK["primary"],
-                markersize=7,
-                markeredgewidth=1.8,
-                zorder=3,
-            )
-            ax.plot(
                 [float(m["anchor_rho"])],
-                [y + 0.1],
+                [y],
                 "D",
                 markersize=4.2,
                 markerfacecolor=INK["surface"],
@@ -1139,7 +1156,7 @@ def fig_anchor_per_seed(
                 zorder=4,
             )
         ax.set_xlim(lo - pad, hi + pad)
-        ax.set_ylim(-(len(models) - 1) * step - len(labels) + 0.35, 0.7)
+        ax.set_ylim(-(len(models) - 1) * step - len(labels) + 0.45, 0.75)
         ax.spines["left"].set_visible(False)
         ax.set_yticks([])
         _range_frame(ax, x=[lo, hi])
@@ -1150,10 +1167,9 @@ def fig_anchor_per_seed(
     ytf = left.get_yaxis_transform()
     for i, model in enumerate(models):
         for j, machine in enumerate(labels):
-            y = -(i * step + j)
             left.text(
                 -0.03,
-                y - 0.09,
+                -(i * step + j),
                 machine,
                 transform=ytf,
                 ha="right",
@@ -1174,9 +1190,10 @@ def fig_anchor_per_seed(
     _title(fig, "Anchor ρ on each of 25 bootstrap graphs, laptop and DGX Spark")
     _footnote(
         fig,
-        "Ticks: per-seed anchor ρ, pairs drawn uniformly. Black bar: mean ± 2 SE.\n"
-        "Diamond: the first post's single-draw estimator on that machine"
-        " (seed-42 graph, pairs in combinations order).",
+        "Violins: kernel density of per-seed anchor ρ (pairs drawn uniformly), cut"
+        " at the observed range; ticks mark the 25 seeds.\nBlack line: mean, with a"
+        " ± 2 SE whisker. Diamond: the first post's single-draw estimator on that"
+        " machine (seed-42 graph, pairs in combinations order).",
     )
     fig.tight_layout(w_pad=1.2)
     return _save(fig, Path(out))
