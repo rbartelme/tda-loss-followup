@@ -153,6 +153,8 @@ CSV_COLUMNS: tuple[str, ...] = (
     "nodes",
     "purity",
     "anchor_rho",
+    "anchor_rho_mean",
+    "anchor_rho_sd",
     "disintegrated",
     "router_acc_in",
     "router_acc_mmlu",
@@ -164,7 +166,9 @@ CSV_COLUMNS: tuple[str, ...] = (
     "timestamp",
 )
 KEY_COLUMNS: tuple[str, ...] = CSV_COLUMNS[:10]
-METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[12:31]
+METRIC_COLUMNS: tuple[str, ...] = CSV_COLUMNS[
+    CSV_COLUMNS.index("within_cos") : CSV_COLUMNS.index("git_sha")
+]
 # Metric columns that name a recipe rather than measure something.
 STRING_METRICS: tuple[str, ...] = ("lr_eval", "router_mode", "router_label")
 NUMERIC_COLUMNS: tuple[str, ...] = tuple(

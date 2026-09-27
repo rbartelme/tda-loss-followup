@@ -83,6 +83,8 @@ def test_csv_columns_are_exactly_the_brief_schema():
         "nodes",
         "purity",
         "anchor_rho",
+        "anchor_rho_mean",
+        "anchor_rho_sd",
         "disintegrated",
         "router_acc_in",
         "router_acc_mmlu",

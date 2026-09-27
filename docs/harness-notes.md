@@ -198,6 +198,14 @@ members carrying the node's majority label. `weighted_purity` weights nodes by s
 So ρ is *not* over all pairs; it is over the first 5,000 same-component pairs of a
 500-doc subsample, and a disintegrated graph reports ρ = 0 by construction.
 
+Because `combinations` walks the first doc against all 499 others, then the second,
+and so on, those 5,000 pairs all touch one of the first ~11 docs of the subsample,
+and the value comes from a single graph. This repo keeps it verbatim as `anchor_rho`
+and adds `tlf.anchor.anchor_rho_uniform` (protocol item 12): the same subsample and
+first-node rule, but pairs drawn uniformly from all same-component pairs, computed
+on every bootstrap seed's graph and reported as `anchor_rho_mean` / `anchor_rho_sd`.
+A graph too small for ρ gives NaN there, which the mean skips, rather than 0.
+
 **Per-feature alignment** (`per_feature_alignment`): Spearman ρ of each raw feature
 column against UMAP-1, UMAP-2, and the radial norm of the canonical lens. 18 values,
 keyed `feat_<name>_corr_{umap1,umap2,radial}`.

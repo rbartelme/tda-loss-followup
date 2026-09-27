@@ -28,7 +28,7 @@ each checkpoint is evaluated on SciCUEval (in-domain) and MMLU non-STEM
 
 1. **Layer 1** cosine geometry: within/between cosine, gap, LR accuracy.
 2. **Layer 2** the bakeoff's 25-seed UMAP → KeplerMapper → HDBSCAN bootstrap: ARI, NMI, coverage, node count.
-3. **Layer 3** linguistic anchors: weighted purity, anchor Spearman ρ (Mapper graph distance vs standardized textstat distance), per-feature alignment.
+3. **Layer 3** linguistic anchors: weighted purity, anchor Spearman ρ (Mapper graph distance vs standardized textstat distance), per-feature alignment. Anchor ρ is reported twice: the bakeoff's single draw on the base-seed graph (`anchor_rho`), and the mean and sd over every bootstrap seed's graph with uniformly sampled pairs (`anchor_rho_mean`, `anchor_rho_sd`; protocol item 12).
 4. **Layer 4** router (new): one logistic regression over the union of both corpora's domain labels (5 scientific + 5 general), trained on a stratified 80% of both eval splits, scored on held-out SciCUEval rows (`router_acc_in`) and MMLU rows (`router_acc_mmlu`), with the cross-corpus misroute fractions (`router_in_to_mmlu_frac`, `router_mmlu_to_in_frac`) beside them.
 
 A Mapper graph with coverage < 0.05 or fewer than 5 nodes is flagged

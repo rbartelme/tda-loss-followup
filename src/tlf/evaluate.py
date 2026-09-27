@@ -57,6 +57,8 @@ CORE_KEYS: tuple[str, ...] = (
     "nodes",
     "purity",
     "anchor_rho",
+    "anchor_rho_mean",
+    "anchor_rho_sd",
     "disintegrated",
     "router_acc_in",
     "router_acc_mmlu",
@@ -545,6 +547,7 @@ def layers_2_3(
     mapper_config: dict[str, Any],
     anchor_max_docs: int = 500,
     anchor_max_pairs: int = 5000,
+    anchor_per_seed: bool = True,
     min_coverage: float = 0.05,
     min_nodes: float = 5,
 ) -> dict[str, Any]:
@@ -561,25 +564,38 @@ def layers_2_3(
         mapper_config: UMAP / cover / clusterer parameters.
         anchor_max_docs: Docs subsampled for anchor rho.
         anchor_max_pairs: Pair cap for anchor rho.
+        anchor_per_seed: Also compute anchor rho on every bootstrap seed's
+            graph with uniformly sampled pairs (``tlf.anchor``) and report its
+            mean and sd; the bakeoff's single draw is reported either way.
         min_coverage: Disintegration threshold on mean coverage.
         min_nodes: Disintegration threshold on mean node count.
 
     Returns:
         Core keys ``ari, ari_sd, nmi, nmi_sd, coverage, nodes, purity,
-        mean_purity, anchor_rho, anchor_p, n_pairs_used, disintegrated,
-        n_seeds_ok`` plus every ``mean_*``/``cv_*`` statistic and the 18
-        per-feature alignment values.
+        mean_purity, anchor_rho, anchor_p, n_pairs_used, anchor_rho_mean,
+        anchor_rho_sd, n_anchor_seeds, disintegrated, n_seeds_ok`` plus every
+        ``mean_*``/``cv_*`` statistic and the 18 per-feature alignment values.
+        ``anchor_rho`` is the bakeoff's single draw on the base-seed graph;
+        the ``anchor_rho_mean`` family is NaN when ``anchor_per_seed`` is off.
     """
     emb = bt.l2_normalize(np.asarray(X, dtype=np.float32))
     bt.assert_normalized(emb)
     n = emb.shape[0]
     dist = bt.compute_distance_matrix(emb)
+    ts = bt.standardize(np.asarray(textstat_raw, dtype=np.float32))
     stab, _rows = bt.seed_bootstrap_stability(
-        emb, dist, n, n_seeds, base_seed, n_workers, mapper_config
+        emb,
+        dist,
+        n,
+        n_seeds,
+        base_seed,
+        n_workers,
+        mapper_config,
+        anchor_features=ts if anchor_per_seed else None,
+        anchor_kwargs={"max_docs": anchor_max_docs, "max_pairs": anchor_max_pairs},
     )
     graph, lens = bt.build_mapper_for_seed(emb, dist, base_seed, mapper_config)
     G = bt.mapper_to_networkx(graph)
-    ts = bt.standardize(np.asarray(textstat_raw, dtype=np.float32))
     cat = bt.categorical_anchor_purity(G, list(labels))
     cont = bt.continuous_anchor_correlation(
         G, ts, n, base_seed, max_pairs=anchor_max_pairs, max_docs=anchor_max_docs
@@ -606,6 +622,9 @@ def layers_2_3(
         "anchor_rho": float(cont["anchor_spearman_rho"]),
         "anchor_p": float(cont["anchor_spearman_p"]),
         "n_pairs_used": float(cont["n_pairs_used"]),
+        "anchor_rho_mean": float(stab.get("mean_anchor_rho", nan)),
+        "anchor_rho_sd": float(stab.get("sd_anchor_rho", nan)),
+        "n_anchor_seeds": float(stab.get("n_anchor_seeds", 0.0)),
         "disintegrated": disintegrated,
         "n_seeds_ok": float(stab.get("n_successful_seeds", nan)),
     }
@@ -851,6 +870,7 @@ def evaluate_checkpoint(
             mapper_config=ev_cfg["mapper"],
             anchor_max_docs=int(ev_cfg.get("anchor_max_docs", 500)),
             anchor_max_pairs=int(ev_cfg.get("anchor_max_pairs", 5000)),
+            anchor_per_seed=bool(ev_cfg.get("anchor_per_seed", True)),
             min_coverage=float(dis.get("min_coverage", 0.05)),
             min_nodes=float(dis.get("min_nodes", 5)),
         )

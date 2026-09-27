@@ -3,10 +3,9 @@
 **Status: walk-through complete, reproduction check run, experiments not yet
 run.** The protocol below is as written on 2026-09-21; the discrepancies between
 it and the scaffold as built are listed under *To be resolved* at the end. Items
-1–6, 9 and 10 were resolved on 2026-09-22 and item 11 on 2026-09-27, each struck
-through with a dated resolution and its own commit; items 7 (HF Hub push) and 8
-(compute budget) are deferred until the experiments run on the DGX Spark, and
-item 12 (anchor ρ estimator) is decided but not yet built.
+1–6, 9 and 10 were resolved on 2026-09-22 and items 11 and 12 on 2026-09-27, each
+struck through with a dated resolution and its own commit; items 7 (HF Hub push)
+and 8 (compute budget) are deferred until the experiments run on the DGX Spark.
 
 Follow-up to *Beyond MTEB: A Topology-Aware Embedder Bake-Off*. The first post argued
 that training regime, not architecture, determines whether an encoder's output manifold
@@ -324,15 +323,44 @@ Differences between this protocol, the scaffold brief, and the code as built
     once it exists. Every fine-tuned checkpoint is compared against its own
     `ckpt_0.0` evaluated on the same machine, so each machine's untrained rows
     are the baseline for its own sweep.
-12. **Anchor ρ estimator.** Protocol and first post: anchor Spearman ρ between
+    **Note 2026-09-27 (order).** Evaluation order is ruled out. MMLU alone in
+    a fresh process reproduces the combined run on all three models to within
+    4·10⁻¹⁶ relative, the size of float summation order. That jitter came from
+    aggregating seeds in completion order and is gone with item 12, which
+    aggregates in seed order. The laptop's MMLU gap to the first post stays
+    unexplained and inside the bound.
+12. ~~**Anchor ρ estimator.** Protocol and first post: anchor Spearman ρ between
     Mapper graph distance and textstat distance, on pairs from 500 covered
     documents with a 5000-pair cap. Built, verbatim from the bakeoff: it is
     computed once, on the base-seed graph, so it carries no spread; and the
     cap is filled in `itertools.combinations` order, so nearly all pairs
     involve the first ~11 sampled documents. Anchor ρ is H1's primary metric
     and every checkpoint's UMAP lens is effectively a new draw; the Spark run
-    above shows single draws moving by up to 0.49.
-    **Decided 2026-09-27, not yet built.** Compute it on every bootstrap
-    seed's graph with uniformly sampled pairs and report mean and sd, keeping
-    the verbatim single-draw value alongside for comparison with the first
-    post.
+    above shows single draws moving by up to 0.49.~~
+    **Resolved 2026-09-27.** `tlf.anchor.anchor_rho_uniform` keeps the
+    bakeoff's 500-doc subsample and first-node assignment but draws its 5000
+    pairs uniformly from all same-component pairs, and the bootstrap worker
+    runs it on every seed's graph. Rows carry `anchor_rho_mean` and
+    `anchor_rho_sd` beside the verbatim `anchor_rho`; `eval.anchor_per_seed`
+    switches it on and is part of the metrics cache key. Seeds are now
+    aggregated in seed order, so reruns agree bit for bit. On a synthetic path
+    graph with 20 of 500 docs corrupted, the uniform estimator reads +0.92 and
+    the bakeoff's −0.82, since every bakeoff pair touches one of the first
+    docs. Laptop, 25 seeds:
+
+    | row | single draw | per-seed mean | sd | SE of mean |
+    |---|---|---|---|---|
+    | biomedbert-fulltext SciCUEval | 0.249 | 0.216 | 0.158 | 0.032 |
+    | biomedbert-fulltext MMLU | 0.476 | 0.230 | 0.204 | 0.041 |
+    | minilm SciCUEval | 0.059 | 0.262 | 0.126 | 0.025 |
+    | minilm MMLU | 0.036 | 0.083 | 0.121 | 0.024 |
+
+    The single draws match the first post exactly except minilm MMLU (the
+    laptop's MMLU gap in item 11), and the Spark's single draws (0.199 and
+    0.457 on SciCUEval) sit inside these spreads. A per-seed sd of 0.12–0.20
+    sets the instrument's resolution: two checkpoints need to differ by about
+    0.09 to clear two standard errors. On MMLU the per-seed means still
+    separate the two models (0.230 against 0.083, about three standard
+    errors of the difference). On SciCUEval they do not (0.216 against 0.262,
+    about one); the first post's SciCUEval contrast between them (0.249
+    against 0.059) came from single draws.

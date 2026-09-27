@@ -19,6 +19,8 @@ _W_EMB: np.ndarray | None = None
 _W_DIST: np.ndarray | None = None
 _W_N_DOCS: int = 0
 _W_CFG: dict | None = None  # tlf
+_W_ANCHOR: np.ndarray | None = None  # tlf: per-seed anchor rho (protocol item 12)
+_W_ANCHOR_KW: dict = {}  # tlf
 
 
 MAPPER_CONFIG = {
@@ -55,7 +57,13 @@ def _seed_worker(seed: int):
     """One Mapper build inside a worker process."""
     graph, _ = build_mapper_for_seed(_W_EMB, _W_DIST, seed, _W_CFG)  # tlf
     G = mapper_to_networkx(graph)
-    return graph_statistics(G, _W_N_DOCS), doc_to_node_partition(G, _W_N_DOCS)
+    stats = graph_statistics(G, _W_N_DOCS)
+    if _W_ANCHOR is not None:  # tlf: per-seed anchor rho (protocol item 12)
+        from tlf.anchor import anchor_rho_uniform
+
+        a = anchor_rho_uniform(G, _W_ANCHOR, seed, **_W_ANCHOR_KW)
+        stats = {**stats, "anchor_rho": a["anchor_rho"], "anchor_n_pairs": a["n_pairs_used"]}
+    return stats, doc_to_node_partition(G, _W_N_DOCS)
 
 
 def l2_normalize(X: np.ndarray) -> np.ndarray:
@@ -180,6 +188,8 @@ def seed_bootstrap_stability(
     base_seed: int,
     n_workers: int,
     mapper_config: dict = MAPPER_CONFIG,  # tlf: parameterised, default unchanged
+    anchor_features: np.ndarray | None = None,  # tlf: per-seed anchor rho (protocol item 12)
+    anchor_kwargs: dict | None = None,  # tlf
 ) -> tuple[dict[str, float], list[dict[str, float]]]:
     """Returns (aggregate metrics dict, per-seed stat rows for plotting).
 
@@ -196,11 +206,13 @@ def seed_bootstrap_stability(
     partitions: list[np.ndarray] = []
 
     # Publish the heavy arrays to module-level globals before forking.
-    global _W_EMB, _W_DIST, _W_N_DOCS, _W_CFG
+    global _W_EMB, _W_DIST, _W_N_DOCS, _W_CFG, _W_ANCHOR, _W_ANCHOR_KW  # tlf: + anchor
     _W_EMB = embeddings
     _W_DIST = dist_matrix
     _W_N_DOCS = n_docs
     _W_CFG = mapper_config  # tlf
+    _W_ANCHOR = anchor_features  # tlf: None disables per-seed anchor rho
+    _W_ANCHOR_KW = dict(anchor_kwargs or {})  # tlf
 
     if n_workers <= 1:
         # Serial fallback — useful for debugging or low-RAM environments.
@@ -213,16 +225,21 @@ def seed_bootstrap_stability(
                 print(f"    seed {seed} failed: {e!r}", file=sys.stderr)
     else:
         ctx = mp.get_context("fork")
+        by_seed: dict[int, tuple] = {}  # tlf: collected by seed, not completion order
         with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as pool:
             futures = {pool.submit(_seed_worker, s): s for s in seeds}
             for fut in as_completed(futures):
                 seed = futures[fut]
                 try:
-                    stat_row, partition = fut.result()
-                    stat_rows.append(stat_row)
-                    partitions.append(partition)
+                    by_seed[seed] = fut.result()  # tlf
                 except Exception as e:  # noqa: BLE001
                     print(f"    seed {seed} failed: {e!r}", file=sys.stderr)
+        # tlf: aggregate in seed order so reruns agree bit for bit; completion
+        # order moved the last bits of every mean and sd between runs.
+        for seed in sorted(by_seed):
+            stat_row, partition = by_seed[seed]
+            stat_rows.append(stat_row)
+            partitions.append(partition)
 
     if len(stat_rows) < 2:
         return (
@@ -250,6 +267,12 @@ def seed_bootstrap_stability(
     out["mean_nmi"] = float(np.mean(nmis)) if nmis else 0.0
     out["sd_ari"] = float(np.std(aris, ddof=1)) if len(aris) > 1 else 0.0  # tlf: addition
     out["sd_nmi"] = float(np.std(nmis, ddof=1)) if len(nmis) > 1 else 0.0  # tlf: addition
+    if _W_ANCHOR is not None:  # tlf: per-seed anchor rho summary (protocol item 12)
+        rhos = np.array([r.get("anchor_rho", np.nan) for r in stat_rows], dtype=np.float64)
+        rhos = rhos[np.isfinite(rhos)]
+        out["mean_anchor_rho"] = float(rhos.mean()) if rhos.size else float("nan")
+        out["sd_anchor_rho"] = float(rhos.std(ddof=1)) if rhos.size > 1 else float("nan")
+        out["n_anchor_seeds"] = float(rhos.size)
     out["n_successful_seeds"] = float(len(stat_rows))
     return out, stat_rows
 

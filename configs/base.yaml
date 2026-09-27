@@ -82,6 +82,10 @@ eval:
   # Layer 3 anchor rho subsampling, as in the bakeoff.
   anchor_max_docs: 500
   anchor_max_pairs: 5000
+  # Also compute anchor rho on every bootstrap seed's graph with uniformly
+  # sampled pairs, reported as anchor_rho_mean / anchor_rho_sd beside the
+  # bakeoff's single draw (protocol item 12). Part of the metrics cache key.
+  anchor_per_seed: true
   disintegrated:
     min_coverage: 0.05
     min_nodes: 5
