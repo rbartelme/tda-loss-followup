@@ -268,32 +268,37 @@ Differences between this protocol, the scaffold brief, and the code as built
    `biomedbert-fulltext` and `minilm` under `OMP_NUM_THREADS=1` and
    `bge-base` without it; numba was on TBB throughout.
    **Resolved 2026-09-27** for evaluation; training is timed by the first
-   `exp1-final`. Spark times are from the fourth repro-check (20 workers,
-   per-seed anchor ρ on, encodings cached), with encoding on the GB10
-   estimated from the first Spark run; laptop times are the control run of
-   the same day (8 workers, encoding on the RTX 4070 included).
+   `exp1-final`. Spark Mapper times are from the fourth repro-check (20
+   workers, per-seed anchor ρ on, encodings cached); laptop times are the
+   control run of the same day (8 workers, encoding on the RTX 4070
+   included). Encoding on the GB10 was not timed directly. It is inferred as
+   the first Spark run's SciCUEval time minus a later cached run's, scaled to
+   MMLU's 2,450 prompts; the two later runs give different answers for
+   `biomedbert-fulltext` and `bge-base` (the numba threading layer changed
+   between them), hence the ranges.
 
-   | model | SciCUEval | MMLU | encoding | Spark per checkpoint | laptop per checkpoint |
+   | model | SciCUEval | MMLU | encoding, both | Spark per checkpoint | laptop per checkpoint |
    |---|---|---|---|---|---|
-   | biomedbert-fulltext | 109 s | 84 s | ~46 s | ~4.0 min | 7.2 min |
-   | minilm | 54 s | 18 s | ~12 s | ~1.4 min | 6.0 min |
-   | bge-base | 73 s | 40 s | ~33 s | ~2.4 min | 7.5 min |
+   | biomedbert-fulltext | 109 s | 84 s | 57–129 s | 4.2–5.4 min | 7.2 min |
+   | minilm | 54 s | 18 s | ~15 s | ~1.5 min | 6.0 min |
+   | bge-base | 73 s | 40 s | 40–61 s | 2.5–2.9 min | 7.5 min |
 
    The sweep is 25 fine-tunes: Exp 1's 12, then 3, 2 and 8 more from Exps
    2–4, which share Exp 1's `biomedbert-fulltext` τ 0.05 random run. With
    the three untrained base models that is 28 checkpoints at init and final,
-   18 of them `biomedbert-fulltext`, or about 1.5 hours of evaluation. Exp 1's
-   intermediate fractions add at most 36 checkpoints and 1.6 hours, less in
-   practice since step 3 fills only the τ values that moved. So evaluation
-   is at most about 3 hours on the Spark, against the protocol's 20–25. The
-   protocol's 65 minutes per checkpoint was 9–11 times too high on the laptop
-   and 16–46 times on the Spark; the bakeoff README's 3.5 minutes per
-   evaluation was close. The corpora run in sequence rather than
-   concurrently, which at these times is not worth building. Fine-tuned
-   checkpoints may give larger graphs and slower bootstraps; the first
-   `exp1-final` will show. Training is 25 runs of 468 optimizer steps (20k
-   pairs, batch 128, 3 epochs; Exp 2's continued-MLM control batches texts
-   instead), and its wall time has not been measured on either machine.
+   18 of them `biomedbert-fulltext`, or 1.6–2.0 hours of evaluation. Exp 1's
+   intermediate fractions add at most 36 checkpoints and another 1.6–2.0
+   hours, less in practice since step 3 fills only the τ values that moved.
+   So evaluation is at most about 4 hours on the Spark, against the
+   protocol's 20–25. The protocol's 65 minutes per checkpoint was 9–11 times
+   too high on the laptop and 12–43 times on the Spark; the bakeoff README's
+   3.5 minutes per evaluation was close. The corpora run in sequence rather
+   than concurrently, which at these times is not worth building.
+   Fine-tuned checkpoints may give larger graphs and slower bootstraps, and
+   the first `exp1-final` encodes fresh checkpoints, so it measures both.
+   Training is 25 runs of 468 optimizer steps (20k pairs, batch 128, 3
+   epochs; Exp 2's continued-MLM control batches texts instead), and its
+   wall time has not been measured on either machine.
 9. ~~**Exp 1 primary plot x-axis.** Protocol: training step. Built: fraction
    of training, which is how checkpoints are defined; both models take the
    same number of steps on the same pair set, so a step axis is a relabel.~~
@@ -364,7 +369,8 @@ Differences between this protocol, the scaffold brief, and the code as built
     `ari_se`: two machines agree when their means differ by at most
     2·√(se₁² + se₂²). The table above keeps the old reading. From the
     laptop and Spark reruns of the same day, whose aggregates match the
-    earlier runs exactly, the jackknife bounds between the two machines are
+    earlier runs to within one unit in the last place (seed order against
+    completion order), the jackknife bounds between the two machines are
     0.037 and 0.066 (`biomedbert-fulltext` SciCUEval, MMLU), 0.047 and 0.045
     (`minilm`) and 0.039 and 0.040 (`bge-base`). The jackknife error is 10–20%
     above the old reading on five rows and below it on `bge-base` MMLU. Five

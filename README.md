@@ -100,9 +100,9 @@ without running anything; `--force` redoes everything.
   the bakeoff's `encode_all` at `max_length 256`, batch 32.
 - **Mapper sweeps run on Spark.** UMAP single-threads itself when seeded, so
   the 25-seed bootstrap is parallelised across forked worker processes.
-  Measured on the Spark at 20 workers, one checkpoint takes about 1.4–4
+  Measured on the Spark at 20 workers, one checkpoint takes about 1.5–5.5
   minutes for both corpora including encoding, against 6–7.5 on the laptop
-  at 8 workers, so the whole sweep is at most about 3 hours of evaluation
+  at 8 workers, so the whole sweep is at most about 4 hours of evaluation
   (protocol item 8). Exp 1 with `--only-final` writes 48 result rows; the
   full Exp 1 writes 120. On Spark use `make exp1 N_WORKERS=20`.
   The distance matrix is 4000 × 4000 float64 per worker under copy-on-write,
