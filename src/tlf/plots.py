@@ -1007,6 +1007,181 @@ def fig_exp4_pareto(
 # ---------------------------------------------------------------------------
 
 
+REPRO_MODELS: tuple[str, ...] = ("biomedbert-fulltext", "minilm", "bge-base")
+REPRO_CORPORA: tuple[str, ...] = ("scicueval", "mmlu")
+SINGLE_DRAW_COLOR = CATEGORICAL[
+    1
+]  # the one accent; machines are told apart by position
+
+
+def load_machine_metrics(
+    root: str | Path,
+    reference: dict[str, Any],
+    models: Iterable[str] = REPRO_MODELS,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Read one machine's untrained-encoder metrics files.
+
+    Args:
+        root: An ``embeddings/`` directory, or a copy of one from another
+            machine, laid out as ``<root>/<hf_id>/<corpus>.metrics.json``.
+        reference: ``configs/reference.yaml`` contents, which map each model
+            key to its ``hf_id``.
+        models: Model keys to read.
+
+    Returns:
+        ``{(model, corpus): metrics}`` for every file present.
+    """
+    import json
+
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for model in models:
+        hf_id = reference[model]["hf_id"]
+        for corpus in REPRO_CORPORA:
+            path = Path(root) / hf_id / f"{corpus}.metrics.json"
+            if path.is_file():
+                out[(model, corpus)] = json.loads(path.read_text())
+    return out
+
+
+def fig_anchor_per_seed(
+    machines: dict[str, dict[tuple[str, str], dict[str, Any]]],
+    out: str | Path,
+    models: Iterable[str] = REPRO_MODELS,
+) -> Path:
+    """Per-seed anchor rho on each machine against the first post's single draw.
+
+    One panel per corpus on a shared x scale; within a panel, one row per
+    (model, machine). Ticks are the per-seed values, the black bar is their
+    mean with a two-standard-error whisker, and the open diamond is the
+    bakeoff's single draw.
+
+    Args:
+        machines: ``{machine label: load_machine_metrics(...)}``, in display order.
+        out: PNG path.
+        models: Model keys, top to bottom.
+
+    Returns:
+        The written path.
+
+    Raises:
+        ValueError: If a row's metrics have no per-seed anchor values (metrics
+            written before ``METRICS_VERSION`` 3).
+    """
+    models = list(models)
+    labels = list(machines)
+    step = len(labels) + 1.0  # one blank row between models
+    rows: list[tuple[str, str, float, dict[str, Any]]] = []
+    for i, model in enumerate(models):
+        for j, machine in enumerate(labels):
+            for corpus in REPRO_CORPORA:
+                m = machines[machine].get((model, corpus))
+                if m is None:
+                    continue
+                if "anchor_rho" not in m.get("per_seed", {}):
+                    raise ValueError(
+                        f"{machine} {model} {corpus}: no per-seed anchor rho"
+                    )
+                rows.append(
+                    (corpus, model, -(i * step + j), {**m, "_machine": machine})
+                )
+
+    xs = [v for _, _, _, m in rows for v in m["per_seed"]["anchor_rho"]]
+    xs += [m["anchor_rho"] for _, _, _, m in rows]
+    xs = list(_finite(xs))
+    lo, hi = min(xs), max(xs)
+    pad = 0.04 * (hi - lo)
+
+    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.36 * step * len(models) + 0.6)
+    for ax, corpus in zip(axes[0], REPRO_CORPORA, strict=True):
+        _style(ax)
+        ax.axvline(0.0, color=INK["baseline"], lw=0.6, zorder=0)
+        for c, _model, y, m in rows:
+            if c != corpus:
+                continue
+            vals = _finite(m["per_seed"]["anchor_rho"])
+            ax.plot(
+                vals,
+                np.full(vals.size, y + 0.1),
+                "|",
+                color=INK["secondary"],
+                alpha=0.55,
+                markersize=6,
+                markeredgewidth=0.7,
+                zorder=2,
+            )
+            mean = float(m["anchor_rho_mean"])
+            se = float(m["anchor_rho_sd"]) / np.sqrt(vals.size)
+            ax.plot(
+                [mean - 2 * se, mean + 2 * se],
+                [y - 0.28, y - 0.28],
+                color=INK["primary"],
+                lw=1.0,
+                solid_capstyle="butt",
+                zorder=3,
+            )
+            ax.plot(
+                [mean],
+                [y - 0.28],
+                "|",
+                color=INK["primary"],
+                markersize=7,
+                markeredgewidth=1.8,
+                zorder=3,
+            )
+            ax.plot(
+                [float(m["anchor_rho"])],
+                [y + 0.1],
+                "D",
+                markersize=4.2,
+                markerfacecolor=INK["surface"],
+                markeredgecolor=SINGLE_DRAW_COLOR,
+                markeredgewidth=1.3,
+                zorder=4,
+            )
+        ax.set_xlim(lo - pad, hi + pad)
+        ax.set_ylim(-(len(models) - 1) * step - len(labels) + 0.35, 0.7)
+        ax.spines["left"].set_visible(False)
+        ax.set_yticks([])
+        _range_frame(ax, x=[lo, hi])
+        ax.set_xlabel("anchor ρ", fontsize=7.5)
+        ax.set_title(CORPUS_LABEL[corpus], loc="left", fontsize=8.5, pad=4)
+
+    left = axes[0][0]
+    ytf = left.get_yaxis_transform()
+    for i, model in enumerate(models):
+        for j, machine in enumerate(labels):
+            y = -(i * step + j)
+            left.text(
+                -0.03,
+                y - 0.09,
+                machine,
+                transform=ytf,
+                ha="right",
+                va="center",
+                fontsize=6.8,
+                color=INK["muted"],
+            )
+        left.text(
+            -0.03,
+            -(i * step) + 0.62,
+            model,
+            transform=ytf,
+            ha="right",
+            va="center",
+            fontsize=7.5,
+            color=INK["primary"],
+        )
+    _title(fig, "Anchor ρ on each of 25 bootstrap graphs, laptop and DGX Spark")
+    _footnote(
+        fig,
+        "Ticks: per-seed anchor ρ, pairs drawn uniformly. Black bar: mean ± 2 SE.\n"
+        "Diamond: the first post's single-draw estimator on that machine"
+        " (seed-42 graph, pairs in combinations order).",
+    )
+    fig.tight_layout(w_pad=1.2)
+    return _save(fig, Path(out))
+
+
 def make_all(
     results_dir: str | Path, reference_path: str | Path, out_dir: str | Path
 ) -> list[Path]:

@@ -7,7 +7,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from tlf.plots import _fraction_label, make_all
+from tlf.plots import (
+    REPRO_CORPORA,
+    REPRO_MODELS,
+    _fraction_label,
+    fig_anchor_per_seed,
+    make_all,
+)
 from tlf.results import append_row, make_row
 
 REF = Path(__file__).resolve().parents[1] / "configs" / "reference.yaml"
@@ -142,3 +148,51 @@ def test_fraction_label_carries_the_step_count_only_when_the_panel_agrees():
     mixed = pd.DataFrame({"total_steps": [468.0, 300.0]})
     assert _fraction_label(mixed) == "fraction of training"
     assert _fraction_label(pd.DataFrame({"ckpt_frac": [0.0]})) == "fraction of training"
+
+
+def _machine(rng, per_seed=True):
+    """Synthetic per-seed metrics for every repro model and corpus.
+
+    Args:
+        rng: Random generator.
+        per_seed: Include the per-seed anchor lists (METRICS_VERSION 3).
+
+    Returns:
+        ``{(model, corpus): metrics}``.
+    """
+    out = {}
+    for model in REPRO_MODELS:
+        for corpus in REPRO_CORPORA:
+            vals = rng.normal(0.2, 0.12, 25)
+            m = {
+                "anchor_rho": float(rng.normal(0.2, 0.15)),
+                "anchor_rho_mean": float(vals.mean()),
+                "anchor_rho_sd": float(vals.std(ddof=1)),
+            }
+            if per_seed:
+                m["per_seed"] = {
+                    "seed": list(range(42, 67)),
+                    "anchor_rho": vals.tolist(),
+                }
+            out[(model, corpus)] = m
+    return out
+
+
+def test_fig_anchor_per_seed_renders_two_machines(tmp_path):
+    """The reproducibility figure draws from per-seed metrics of two machines."""
+    rng = np.random.default_rng(0)
+    out = fig_anchor_per_seed(
+        {"laptop": _machine(rng), "DGX Spark": _machine(rng)}, tmp_path / "f.png"
+    )
+    assert out.is_file() and out.stat().st_size > 10_000
+
+
+def test_fig_anchor_per_seed_refuses_metrics_without_per_seed_values(tmp_path):
+    """Metrics from before per-seed persistence cannot be drawn as rugs."""
+    import pytest
+
+    with pytest.raises(ValueError, match="no per-seed anchor rho"):
+        fig_anchor_per_seed(
+            {"laptop": _machine(np.random.default_rng(0), per_seed=False)},
+            tmp_path / "f.png",
+        )
