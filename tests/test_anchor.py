@@ -107,7 +107,9 @@ def _slow_fake_worker(seed: int):
 
 
 # Python 3.12 warns on any fork from a threaded process; the bootstrap forks by design.
-@pytest.mark.filterwarnings("ignore:This process .* is multi-threaded:DeprecationWarning")
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded:DeprecationWarning"
+)
 def test_bootstrap_aggregates_in_seed_order_and_summarises_anchor(monkeypatch):
     """Rows come back in seed order, and NaN seeds drop out of the anchor summary."""
     monkeypatch.setattr(bt, "_seed_worker", _slow_fake_worker)
@@ -137,3 +139,17 @@ def test_no_anchor_features_means_no_anchor_summary(monkeypatch):
         np.zeros((4, 2), np.float32), np.zeros((4, 4)), 4, 3, 42, 1
     )
     assert "mean_anchor_rho" not in out
+
+
+def test_equally_distant_pairs_give_nan_without_a_warning():
+    """Isolated nodes leave only 0-hop pairs; rho is NaN and scipy is not asked."""
+    import warnings
+
+    G = nx.empty_graph(50)
+    for k in G.nodes:
+        G.nodes[k]["members"] = list(range(k * 10, k * 10 + 10))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        out = anchor_rho_uniform(G, _along(500, 10), seed=0)
+    assert np.isnan(out["anchor_rho"])
+    assert out["n_pairs_used"] == 50 * comb(10, 2)

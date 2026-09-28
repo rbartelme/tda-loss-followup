@@ -66,8 +66,8 @@ def anchor_rho_uniform(
 
     Returns:
         ``anchor_rho`` and ``anchor_p`` (NaN when fewer than ``MIN_COVERED_DOCS``
-        docs are covered or fewer than ``MIN_PAIRS`` pairs are connected) and
-        ``n_pairs_used``.
+        docs are covered, fewer than ``MIN_PAIRS`` pairs are connected, or the
+        sampled graph or feature distances are all equal) and ``n_pairs_used``.
     """
     from scipy.stats import spearmanr
 
@@ -100,6 +100,10 @@ def anchor_rho_uniform(
     i, j = iu[take], ju[take]
     feats = np.asarray(anchor_features, dtype=np.float64)
     ling_d = np.linalg.norm(feats[covered[i]] - feats[covered[j]], axis=1)
+    if np.ptp(graph_d[take]) == 0 or np.ptp(ling_d) == 0:
+        # e.g. every connected pair inside a single node, all 0 hops apart:
+        # rank correlation is undefined, as scipy would say with a warning.
+        return {**empty, "n_pairs_used": float(take.size)}
     rho, p = spearmanr(graph_d[take], ling_d)
     return {
         "anchor_rho": float(rho),
