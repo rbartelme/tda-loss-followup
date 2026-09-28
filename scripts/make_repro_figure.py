@@ -42,6 +42,9 @@ def main() -> None:
     ap.add_argument(
         "--roster-out", type=Path, default=Path("figures/anchor-roster.png")
     )
+    ap.add_argument(
+        "--roster-machine", default="laptop", help="where the roster was computed"
+    )
     args = ap.parse_args()
     if args.machine:
         ref = load_reference(args.reference)
@@ -51,7 +54,13 @@ def main() -> None:
             machines[label] = load_machine_metrics(root, ref)
         print(fig_anchor_per_seed(machines, args.out))
     if args.roster is not None:
-        print(fig_anchor_roster(load_reanalysis(args.roster), args.roster_out))
+        print(
+            fig_anchor_roster(
+                load_reanalysis(args.roster),
+                args.roster_out,
+                machine=args.roster_machine,
+            )
+        )
 
 
 if __name__ == "__main__":

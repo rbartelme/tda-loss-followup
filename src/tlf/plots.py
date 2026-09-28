@@ -1298,6 +1298,7 @@ def fig_anchor_roster(
     out: str | Path,
     order_by: str = "scicueval",
     min_seeds: int = 5,
+    machine: str = "laptop",
 ) -> Path:
     """Per-seed anchor rho for every first-post row, against the published value.
 
@@ -1312,11 +1313,14 @@ def fig_anchor_roster(
         out: PNG path.
         order_by: Corpus that sets the row order.
         min_seeds: Fewest scorable seeds for a row to be drawn.
+        machine: Where the metrics were computed, for the footnote.
 
     Returns:
         The written path.
     """
     keys = roster_order(metrics, order_by, min_seeds)
+    drawn = [m for m in metrics.values() if _scorable(m, min_seeds)]
+    fewest = int(min(m["n_anchor_seeds"] for m in drawn)) if drawn else 0
     xs: list[float] = []
     for m in metrics.values():
         if _scorable(m, min_seeds):
@@ -1386,11 +1390,13 @@ def fig_anchor_roster(
     _title(fig, "Anchor ρ per seed for every encoder in the first post")
     _footnote(
         fig,
-        f"Laptop, 25 bootstrap graphs per row, sorted by {CORPUS_LABEL[order_by]}"
-        " per-seed mean. Violins, ticks and black line as in the two-machine"
-        " figure.\nDiamond: the value the first post published (one graph, pairs"
-        " in combinations order). MLM: masked-language pretraining only; the other"
-        " rows are contrastive.",
+        f"{machine[:1].upper()}{machine[1:]}; rows sorted by {CORPUS_LABEL[order_by]}"
+        " per-seed mean. Violins, ticks and black line as in the two-machine figure."
+        f"\nRows score {fewest}–25 seeds; a graph whose sampled pairs are all"
+        " equally far apart has no ρ. Disintegrated: coverage < 5% or < 5 nodes."
+        "\nDiamond: the first post's published value (one graph, pairs in"
+        " combinations order). MLM: masked-language pretraining only; others"
+        " contrastive.",
     )
     fig.tight_layout(w_pad=1.2)
     return _save(fig, Path(out))
