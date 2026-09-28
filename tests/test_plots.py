@@ -219,7 +219,11 @@ def _roster(rng):
                 "anchor_rho_sd": float(vals.std(ddof=1)),
                 "n_anchor_seeds": 25.0,
                 "disintegrated": False,
-                "published": {"anchor_spearman_rho": float(centre)},
+                "published": {
+                    "anchor_spearman_rho": float(centre),
+                    "mean_coverage": 0.5,
+                    "mean_n_nodes": 100.0,
+                },
             }
     out[("mid", "mmlu")].update(disintegrated=True, n_anchor_seeds=0.0)
     return out
@@ -237,5 +241,18 @@ def test_roster_order_puts_unscorable_rows_last():
 
 def test_fig_anchor_roster_renders_with_a_disintegrated_row(tmp_path):
     """The all-encoder figure draws, writing a word where a graph disintegrated."""
-    out = fig_anchor_roster(_roster(np.random.default_rng(0)), tmp_path / "r.png")
+    out = fig_anchor_roster(
+        {"laptop": _roster(np.random.default_rng(0))}, tmp_path / "r.png"
+    )
     assert out.is_file() and out.stat().st_size > 10_000
+
+
+def test_fig_anchor_roster_splits_two_machines(tmp_path):
+    """Two machines draw as split violins; a third is refused."""
+    rng = np.random.default_rng(1)
+    two = {"laptop": _roster(rng), "DGX Spark": _roster(rng)}
+    assert fig_anchor_roster(two, tmp_path / "r2.png").is_file()
+    import pytest
+
+    with pytest.raises(ValueError, match="one or two machines"):
+        fig_anchor_roster({**two, "third": _roster(rng)}, tmp_path / "r3.png")

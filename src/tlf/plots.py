@@ -1012,6 +1012,29 @@ REPRO_MODELS: tuple[str, ...] = ("biomedbert-fulltext", "minilm", "bge-base")
 REPRO_CORPORA: tuple[str, ...] = ("scicueval", "mmlu")
 VIOLIN_FILL = "#e3e2da"  # tint between INK baseline and surface: shape, not identity
 VIOLIN_HALF = 0.4  # half-height of the widest violin, in row units
+# Machine hues for split violins: viridis at 0.25 and 0.5 (#3b528b, #21918c),
+# chroma raised to the dataviz floor of 0.10 at unchanged hue and lightness.
+# Validated with SINGLE_DRAW_COLOR on the light surface: all checks pass.
+# The first machine takes the upper half.
+MACHINE_COLORS: tuple[str, ...] = ("#3a528d", "#09928d")
+
+
+def _tint(color: str, alpha: float = 0.28) -> str:
+    """Blend a hue into the surface colour, for fills that should stay quiet.
+
+    Args:
+        color: ``#rrggbb`` hue.
+        alpha: Share of the hue in the blend.
+
+    Returns:
+        The blended ``#rrggbb``.
+    """
+    fg = [int(color[i : i + 2], 16) for i in (1, 3, 5)]
+    bg = [int(INK["surface"][i : i + 2], 16) for i in (1, 3, 5)]
+    mix = [round(alpha * f + (1 - alpha) * b) for f, b in zip(fg, bg, strict=True)]
+    return "#" + "".join(f"{c:02x}" for c in mix)
+
+
 SINGLE_DRAW_COLOR = CATEGORICAL[
     1
 ]  # the one accent; machines are told apart by position
@@ -1053,8 +1076,10 @@ def _violin_row(
     mean: float,
     sd: float,
     single: float | None = None,
+    side: str = "both",
+    color: str | None = None,
 ) -> None:
-    """Draw one horizontal violin with its seeds, mean, whisker and single draw.
+    """Draw one horizontal violin, or one half of a split violin.
 
     Args:
         ax: Axes to draw on.
@@ -1062,46 +1087,56 @@ def _violin_row(
         y: Row centre.
         mean: Mean of the per-seed values.
         sd: Their standard deviation (the whisker is two standard errors).
-        single: The single-draw value to mark with an open diamond, if any.
+        single: A single-draw value to mark with an open diamond, if any.
+        side: ``both`` for a full violin, ``upper`` or ``lower`` for a half.
+        color: Hue for this half's edge, mean and whisker (fill is a tint of
+            it); ``None`` draws the neutral full violin.
     """
     kde = gaussian_kde(vals)
     grid = np.linspace(vals.min(), vals.max(), 200)
     dens = kde(grid)
     peak = float(dens.max())
     half = VIOLIN_HALF * dens / peak
+    at_mean = VIOLIN_HALF * float(kde(mean)[0]) / peak
+    se = sd / np.sqrt(vals.size)
+    ink = color or INK["primary"]
+    fill = _tint(color) if color else VIOLIN_FILL
+    edge = color or INK["muted"]
+    sign = {"both": 0.0, "upper": 1.0, "lower": -1.0}[side]
+    if side == "both":
+        lo_edge, hi_edge, tick_y, whisk_y = y - half, y + half, y, y
+        mean_span = (y - at_mean, y + at_mean)
+    else:
+        lo_edge = y if sign > 0 else y - half
+        hi_edge = y + half if sign > 0 else y
+        tick_y = y + sign * 0.2
+        whisk_y = y + sign * 0.06
+        mean_span = (y, y + sign * at_mean)
     ax.fill_between(
-        grid,
-        y - half,
-        y + half,
-        facecolor=VIOLIN_FILL,
-        edgecolor=INK["muted"],
-        linewidth=0.6,
-        zorder=1,
+        grid, lo_edge, hi_edge, facecolor=fill, edgecolor=edge, linewidth=0.6, zorder=1
     )
     ax.plot(
         vals,
-        np.full(vals.size, y),
+        np.full(vals.size, tick_y),
         "|",
         color=INK["secondary"],
         alpha=0.6,
-        markersize=3.5,
+        markersize=3.0 if side != "both" else 3.5,
         markeredgewidth=0.6,
         zorder=2,
     )
-    se = sd / np.sqrt(vals.size)
-    at_mean = VIOLIN_HALF * float(kde(mean)[0]) / peak
     ax.plot(
         [mean, mean],
-        [y - at_mean, y + at_mean],
-        color=INK["primary"],
+        list(mean_span),
+        color=ink,
         lw=1.4,
         solid_capstyle="butt",
         zorder=3,
     )
     ax.plot(
         [mean - 2 * se, mean + 2 * se],
-        [y, y],
-        color=INK["primary"],
+        [whisk_y, whisk_y],
+        color=ink,
         lw=1.0,
         solid_capstyle="butt",
         zorder=3,
@@ -1109,7 +1144,7 @@ def _violin_row(
     if single is not None and np.isfinite(single):
         ax.plot(
             [single],
-            [y],
+            [tick_y if side != "both" else y],
             "D",
             markersize=4.2,
             markerfacecolor=INK["surface"],
@@ -1119,22 +1154,69 @@ def _violin_row(
         )
 
 
+def _machine_legend(fig: plt.Figure, labels: list[str]) -> None:
+    """Name the halves of a split violin: first machine upper, second lower.
+
+    Args:
+        fig: Figure to annotate.
+        labels: Machine labels in display order (one or two).
+    """
+    from matplotlib.patches import Patch
+
+    where = ("upper half", "lower half")
+    handles = [
+        Patch(facecolor=_tint(c), edgecolor=c, linewidth=0.8, label=f"{lab} ({w})")
+        for lab, c, w in zip(labels, MACHINE_COLORS, where, strict=False)
+    ]
+    leg = fig.legend(
+        handles=handles,
+        loc="upper right",
+        bbox_to_anchor=(0.99, 1.0),
+        ncol=len(handles),
+        frameon=False,
+        fontsize=7,
+        handlelength=1.2,
+        columnspacing=1.2,
+    )
+    for t in leg.get_texts():
+        t.set_color(INK["secondary"])
+
+
+def _halves(labels: list[str]) -> list[tuple[str, str | None]]:
+    """Side and hue for each machine: split violins for two, a neutral one for one.
+
+    Args:
+        labels: Machine labels in display order.
+
+    Returns:
+        ``(side, color)`` per machine.
+
+    Raises:
+        ValueError: For more than two machines.
+    """
+    if len(labels) == 1:
+        return [("both", None)]
+    if len(labels) == 2:
+        return [("upper", MACHINE_COLORS[0]), ("lower", MACHINE_COLORS[1])]
+    raise ValueError(f"split violins take one or two machines, got {len(labels)}")
+
+
 def fig_anchor_per_seed(
     machines: dict[str, dict[tuple[str, str], dict[str, Any]]],
     out: str | Path,
     models: Iterable[str] = REPRO_MODELS,
 ) -> Path:
-    """Per-seed anchor rho on each machine against the first post's single draw.
+    """Per-seed anchor rho on each machine against its own single draw.
 
-    One panel per corpus on a shared x scale; within a panel, one row per
-    (model, machine). Each row is a horizontal violin: a Gaussian kernel
-    density of the per-seed values, cut at their observed range and scaled to
-    a common maximum width, with the seeds as ticks on its centre line. The
-    black line is their mean, with a two-standard-error whisker, and the open
-    diamond is the bakeoff's single draw on the seed-42 graph.
+    One panel per corpus on a shared x scale and one row per model. With two
+    machines each row is a split violin, the first machine above the centre
+    line and the second below (``_violin_row``); each half carries its seeds,
+    its mean with a two-standard-error whisker, and that machine's single draw
+    with the first post's estimator as an open diamond.
 
     Args:
-        machines: ``{machine label: load_machine_metrics(...)}``, in display order.
+        machines: ``{machine label: load_machine_metrics(...)}``, in display order
+            (one or two).
         out: PNG path.
         models: Model keys, top to bottom.
 
@@ -1143,84 +1225,72 @@ def fig_anchor_per_seed(
 
     Raises:
         ValueError: If a row's metrics have no per-seed anchor values (metrics
-            written before ``METRICS_VERSION`` 3).
+            written before ``METRICS_VERSION`` 3), or for more than two machines.
     """
     models = list(models)
     labels = list(machines)
-    step = len(labels) + 1.0  # one blank row between models
-    rows: list[tuple[str, str, float, dict[str, Any]]] = []
-    for i, model in enumerate(models):
-        for j, machine in enumerate(labels):
-            for corpus in REPRO_CORPORA:
-                m = machines[machine].get((model, corpus))
-                if m is None:
-                    continue
-                if "anchor_rho" not in m.get("per_seed", {}):
-                    raise ValueError(
-                        f"{machine} {model} {corpus}: no per-seed anchor rho"
-                    )
-                rows.append((corpus, model, -(i * step + j), m))
-
-    xs = [v for _, _, _, m in rows for v in m["per_seed"]["anchor_rho"]]
-    xs += [m["anchor_rho"] for _, _, _, m in rows]
+    halves = _halves(labels)
+    for machine in labels:
+        for (model, corpus), m in machines[machine].items():
+            if model in models and "anchor_rho" not in m.get("per_seed", {}):
+                raise ValueError(f"{machine} {model} {corpus}: no per-seed anchor rho")
+    xs: list[float] = []
+    for machine in labels:
+        for (model, _corpus), m in machines[machine].items():
+            if model in models:
+                xs += list(_finite(m["per_seed"]["anchor_rho"])) + [m["anchor_rho"]]
     xs = list(_finite(xs))
     lo, hi = min(xs), max(xs)
     pad = 0.04 * (hi - lo)
-
-    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.4 * step * len(models) + 0.6)
+    step = 1.15
+    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.62 * len(models) + 1.0)
     for ax, corpus in zip(axes[0], REPRO_CORPORA, strict=True):
         _style(ax)
         ax.axvline(0.0, color=INK["baseline"], lw=0.6, zorder=0)
-        for c, _model, y, m in rows:
-            if c != corpus:
-                continue
-            _violin_row(
-                ax,
-                _finite(m["per_seed"]["anchor_rho"]),
-                y,
-                float(m["anchor_rho_mean"]),
-                float(m["anchor_rho_sd"]),
-                float(m["anchor_rho"]),
-            )
+        for i, model in enumerate(models):
+            y = -i * step
+            for machine, (side, color) in zip(labels, halves, strict=True):
+                m = machines[machine].get((model, corpus))
+                if m is None:
+                    continue
+                _violin_row(
+                    ax,
+                    _finite(m["per_seed"]["anchor_rho"]),
+                    y,
+                    float(m["anchor_rho_mean"]),
+                    float(m["anchor_rho_sd"]),
+                    float(m["anchor_rho"]),
+                    side=side,
+                    color=color,
+                )
         ax.set_xlim(lo - pad, hi + pad)
-        ax.set_ylim(-(len(models) - 1) * step - len(labels) + 0.45, 0.75)
+        ax.set_ylim(-(len(models) - 1) * step - 0.55, 0.55)
         ax.spines["left"].set_visible(False)
         ax.set_yticks([])
         _range_frame(ax, x=[lo, hi])
         ax.set_xlabel("anchor ρ", fontsize=7.5)
         ax.set_title(CORPUS_LABEL[corpus], loc="left", fontsize=8.5, pad=4)
-
     left = axes[0][0]
-    ytf = left.get_yaxis_transform()
     for i, model in enumerate(models):
-        for j, machine in enumerate(labels):
-            left.text(
-                -0.03,
-                -(i * step + j),
-                machine,
-                transform=ytf,
-                ha="right",
-                va="center",
-                fontsize=6.8,
-                color=INK["muted"],
-            )
         left.text(
             -0.03,
-            -(i * step) + 0.62,
+            -i * step,
             model,
-            transform=ytf,
+            transform=left.get_yaxis_transform(),
             ha="right",
             va="center",
             fontsize=7.5,
             color=INK["primary"],
         )
-    _title(fig, "Anchor ρ on each of 25 bootstrap graphs, laptop and DGX Spark")
+    if len(labels) == 2:
+        _machine_legend(fig, labels)
+    _title(fig, "Anchor ρ on each of 25 bootstrap graphs, per machine")
     _footnote(
         fig,
-        "Violins: kernel density of per-seed anchor ρ (pairs drawn uniformly), cut"
-        " at the observed range; ticks mark the 25 seeds.\nBlack line: mean, with a"
-        " ± 2 SE whisker. Diamond: the first post's single-draw estimator on that"
-        " machine (seed-42 graph, pairs in combinations order).",
+        "Each half: kernel density of per-seed anchor ρ (pairs drawn uniformly),"
+        " cut at the observed range, with its seed ticks and its mean ± 2 SE."
+        "\nDiamond: that machine's single draw with the first post's estimator"
+        " (seed-42 graph, pairs in combinations order).",
     )
     fig.tight_layout(w_pad=1.2)
     return _save(fig, Path(out))
@@ -1293,70 +1363,109 @@ def roster_order(
     return sorted(keys, key=rank)
 
 
+def _published_scorable(m: dict[str, Any]) -> bool:
+    """Whether the first post's row was scored rather than disintegrated.
+
+    Args:
+        m: One row's re-analysis metrics, with the ``published`` columns.
+
+    Returns:
+        False when the published graph had coverage below 5% or fewer than 5
+        nodes, in which case its anchor rho of 0 is a fallback, not a value.
+    """
+    pub = m.get("published", {})
+    return pub.get("mean_coverage", 0.0) >= 0.05 and pub.get("mean_n_nodes", 0.0) >= 5
+
+
 def fig_anchor_roster(
-    metrics: dict[tuple[str, str], dict[str, Any]],
+    machines: dict[str, dict[tuple[str, str], dict[str, Any]]],
     out: str | Path,
     order_by: str = "scicueval",
     min_seeds: int = 5,
-    machine: str = "laptop",
 ) -> Path:
     """Per-seed anchor rho for every first-post row, against the published value.
 
-    Both corpus panels share one x scale and one row order (``roster_order``),
-    so an encoder sits on the same line in each. Rows are drawn with
-    ``_violin_row``; the diamond is the value the first post published
-    (``published.anchor_spearman_rho``), and a disintegrated row gets a word
-    instead of marks.
+    Both corpus panels share one x scale and one row order (``roster_order`` on
+    the first machine), so an encoder sits on the same line in each. With two
+    machines each row is a split violin, first machine above the centre line.
+    The diamond is the value the first post published; a half whose graph
+    disintegrated gets a word instead of marks, and a published row that
+    disintegrated gets no diamond.
 
     Args:
-        metrics: ``load_reanalysis`` output.
+        machines: ``{machine label: load_reanalysis(...)}``, in display order
+            (one or two).
         out: PNG path.
         order_by: Corpus that sets the row order.
-        min_seeds: Fewest scorable seeds for a row to be drawn.
-        machine: Where the metrics were computed, for the footnote.
+        min_seeds: Fewest scorable seeds for a half to be drawn.
 
     Returns:
         The written path.
+
+    Raises:
+        ValueError: For more than two machines.
     """
-    keys = roster_order(metrics, order_by, min_seeds)
-    drawn = [m for m in metrics.values() if _scorable(m, min_seeds)]
-    fewest = int(min(m["n_anchor_seeds"] for m in drawn)) if drawn else 0
+    labels = list(machines)
+    halves = _halves(labels)
+    first = machines[labels[0]]
+    keys = roster_order(first, order_by, min_seeds)
     xs: list[float] = []
-    for m in metrics.values():
-        if _scorable(m, min_seeds):
-            xs += list(_finite(m["per_seed"]["anchor_rho"]))
-            xs += list(_finite([m.get("published", {}).get("anchor_spearman_rho")]))
+    counts: list[int] = []
+    for metrics in machines.values():
+        for m in metrics.values():
+            if _scorable(m, min_seeds):
+                xs += list(_finite(m["per_seed"]["anchor_rho"]))
+                counts.append(int(m["n_anchor_seeds"]))
+                if _published_scorable(m):
+                    xs += list(_finite([m["published"].get("anchor_spearman_rho")]))
     lo, hi = min(xs), max(xs)
     pad = 0.04 * (hi - lo)
-    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.27 * len(keys) + 0.9)
+    fewest = min(counts) if counts else 0
+    fig, axes = _fig(1, len(REPRO_CORPORA), w=3.7, h=0.3 * len(keys) + 1.0)
     for ax, corpus in zip(axes[0], REPRO_CORPORA, strict=True):
         _style(ax)
         ax.axvline(0.0, color=INK["baseline"], lw=0.6, zorder=0)
         for r, key in enumerate(keys):
             y = -float(r)
-            m = metrics.get((key, corpus))
-            if m is None:
-                continue
-            if not _scorable(m, min_seeds):
-                ax.text(
-                    lo,
+            pub_row = None
+            for machine, (side, color) in zip(labels, halves, strict=True):
+                m = machines[machine].get((key, corpus))
+                if m is None:
+                    continue
+                pub_row = pub_row or m
+                if not _scorable(m, min_seeds):
+                    dy = {"both": 0.0, "upper": 0.2, "lower": -0.2}[side]
+                    ax.text(
+                        lo,
+                        y + dy,
+                        "disintegrated",
+                        ha="left",
+                        va="center",
+                        fontsize=6.2,
+                        style="italic",
+                        color=INK["muted"],
+                    )
+                    continue
+                _violin_row(
+                    ax,
+                    _finite(m["per_seed"]["anchor_rho"]),
                     y,
-                    "disintegrated",
-                    ha="left",
-                    va="center",
-                    fontsize=6.5,
-                    style="italic",
-                    color=INK["muted"],
+                    float(m["anchor_rho_mean"]),
+                    float(m["anchor_rho_sd"]),
+                    side=side,
+                    color=color,
                 )
-                continue
-            _violin_row(
-                ax,
-                _finite(m["per_seed"]["anchor_rho"]),
-                y,
-                float(m["anchor_rho_mean"]),
-                float(m["anchor_rho_sd"]),
-                m.get("published", {}).get("anchor_spearman_rho"),
-            )
+            if pub_row is not None and _published_scorable(pub_row):
+                ax.plot(
+                    [pub_row["published"]["anchor_spearman_rho"]],
+                    [y],
+                    "D",
+                    markersize=4.2,
+                    markerfacecolor=INK["surface"],
+                    markeredgecolor=SINGLE_DRAW_COLOR,
+                    markeredgewidth=1.3,
+                    zorder=4,
+                )
         ax.set_xlim(lo - pad, hi + pad)
         ax.set_ylim(-len(keys) + 0.45, 0.6)
         ax.spines["left"].set_visible(False)
@@ -1387,16 +1496,18 @@ def fig_anchor_roster(
                 fontsize=6.5,
                 color=INK["muted"],
             )
+    if len(labels) == 2:
+        _machine_legend(fig, labels)
     _title(fig, "Anchor ρ per seed for every encoder in the first post")
     _footnote(
         fig,
-        f"{machine[:1].upper()}{machine[1:]}; rows sorted by {CORPUS_LABEL[order_by]}"
-        " per-seed mean. Violins, ticks and black line as in the two-machine figure."
-        f"\nRows score {fewest}–25 seeds; a graph whose sampled pairs are all"
-        " equally far apart has no ρ. Disintegrated: coverage < 5% or < 5 nodes."
-        "\nDiamond: the first post's published value (one graph, pairs in"
-        " combinations order). MLM: masked-language pretraining only; others"
-        " contrastive.",
+        "The first post's cached vectors, with Mapper run on each machine; rows sorted"
+        f" by {labels[0]} {CORPUS_LABEL[order_by]} per-seed mean."
+        "\nEach half: per-seed density, seed ticks and mean ± 2 SE, over"
+        f" {fewest}–25 scorable seeds (equally distant pairs give no ρ)."
+        "\nDisintegrated: coverage < 5% or < 5 nodes. Diamond: the first post's"
+        " published value (one graph, pairs in combinations order)."
+        "\nMLM: masked-language pretraining only; others contrastive.",
     )
     fig.tight_layout(w_pad=1.2)
     return _save(fig, Path(out))

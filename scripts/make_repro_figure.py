@@ -35,15 +35,13 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("figures/anchor-per-seed.png"))
     ap.add_argument(
         "--roster",
-        type=Path,
-        default=None,
-        help="scripts/reanalyse_bakeoff.py output; also draws the all-encoder figure",
+        action="append",
+        default=[],
+        metavar="LABEL=DIR",
+        help="scripts/reanalyse_bakeoff.py output per machine; repeat, in display order",
     )
     ap.add_argument(
         "--roster-out", type=Path, default=Path("figures/anchor-roster.png")
-    )
-    ap.add_argument(
-        "--roster-machine", default="laptop", help="where the roster was computed"
     )
     args = ap.parse_args()
     if args.machine:
@@ -53,14 +51,12 @@ def main() -> None:
             label, _, root = spec.partition("=")
             machines[label] = load_machine_metrics(root, ref)
         print(fig_anchor_per_seed(machines, args.out))
-    if args.roster is not None:
-        print(
-            fig_anchor_roster(
-                load_reanalysis(args.roster),
-                args.roster_out,
-                machine=args.roster_machine,
-            )
-        )
+    if args.roster:
+        rosters = {}
+        for spec in args.roster:
+            label, _, root = spec.partition("=")
+            rosters[label] = load_reanalysis(root)
+        print(fig_anchor_roster(rosters, args.roster_out))
 
 
 if __name__ == "__main__":
