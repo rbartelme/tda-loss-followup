@@ -5,7 +5,8 @@ run.** The protocol below is as written on 2026-09-21; the discrepancies between
 it and the scaffold as built are listed under *To be resolved* at the end. Items
 1–6, 9 and 10 were resolved on 2026-09-22 and items 8, 11 and 12 on 2026-09-27,
 each struck through with a dated resolution and its own commit; item 7 (HF Hub
-push) is deferred until the experiments have run.
+push) is deferred until the experiments have run. Item 13 records a finding from
+re-analysing the first post that changes interpretation, not design.
 
 Follow-up to *Beyond MTEB: A Topology-Aware Embedder Bake-Off*. The first post argued
 that training regime, not architecture, determines whether an encoder's output manifold
@@ -411,3 +412,29 @@ Differences between this protocol, the scaffold brief, and the code as built
     errors of the difference). On SciCUEval they do not (0.216 against 0.262,
     about one); the first post's SciCUEval contrast between them (0.249
     against 0.059) came from single draws.
+13. **Baseline anchor ρ depends on the corpus.** H1 and H2 lean on the first
+    post's claim that training regime sets whether an encoder's manifold
+    tracks surface features. Re-running Layers 2–3 with the per-seed estimator
+    (item 12) on the first post's own cached embeddings, for all 15 of its
+    encoders on both machines (`scripts/reanalyse_bakeoff.py`), finds that
+    contrast on MMLU but not on SciCUEval. Laptop, per-seed mean ± SE; MMLU
+    excludes the two rows that disintegrate (`medcpt-query`, `embeddinggemma`):
+
+    | corpus | MLM rows, mean | contrastive rows, mean | `biomedbert-fulltext` | `minilm` |
+    |---|---|---|---|---|
+    | SciCUEval | 0.220 | 0.269 | 0.216 ± 0.032 | 0.262 ± 0.025 |
+    | MMLU | 0.160 | 0.103 | 0.230 ± 0.041 | 0.083 ± 0.024 |
+
+    On SciCUEval all 15 per-seed means fall between 0.16 and 0.37, and the
+    first post's single-draw ranking there (MedCPT first at 0.53) was mostly
+    noise.
+    **Noted 2026-09-27; grid unchanged.** Every effect in the sweep is read per
+    corpus against the model's own untrained row, so this changes
+    interpretation, not design: on SciCUEval the two core models start level,
+    and H1 there tests change from a common baseline rather than a gap that
+    already exists. It could bear on encoder choice. The stronger test of the
+    topological loss lies outside this protocol: a frozen small or large
+    language-model backbone adapted with LoRA, trained with the H0 loss (the
+    minimum spanning tree of the 0-dimensional Vietoris–Rips filtration) as a
+    complement to the main objective, on new inputs. That is the direction for
+    the paper.
